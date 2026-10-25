@@ -1,0 +1,465 @@
+import React, { useState, useRef } from 'react';
+import { api } from '../lib/api';
+import {
+  parseSmartInput,
+  parseAmountInput,
+  parseDateFromVietnameseText,
+  guessCategoryAndType,
+  formatAmountDisplay
+} from '../lib/smartParser';
+import { Upload, X, Check, AlertCircle, FileText, ClipboardList } from 'lucide-react';
+
+interface Props {
+  onImported: () => void;
+  onClose: () => void;
+}
+
+interface PreviewRow {
+  date: string;
+  type: 'income' | 'expense';
+  amount: number;
+  description: string;
+  category: string;
+  note: string;
+  valid: boolean;
+  error?: string;
+}
+
+// Tách các cột phân cách bởi dấu phẩy, tab hoặc chấm phẩy
+function parseDelimitedLine(line: string): string[] {
+  let delimiter = ',';
+  if (line.includes('\t')) delimiter = '\t';
+  else if (line.includes(';') && !line.includes(',')) delimiter = ';';
+
+  if (delimiter === '\t' || delimiter === ';') {
+    return line.split(delimiter).map(s => s.trim().replace(/^"|"$/g, ''));
+  }
+
+  // Parse CSV có nháy kép
+  const result: string[] = [];
+  let current = '';
+  let inQuote = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') inQuote = !inQuote;
+    else if (ch === ',' && !inQuote) {
+      result.push(current.trim().replace(/^"|"$/g, ''));
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  result.push(current.trim().replace(/^"|"$/g, ''));
+  return result;
+}
+
+function parseExplicitDate(raw: string): string | null {
+  raw = raw.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const m1 = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (m1) return `${m1[3]}-${m1[2].padStart(2, '0')}-${m1[1].padStart(2, '0')}`;
+  const m2 = raw.match(/^(\d{1,2})[\/\-](\d{1,2})$/);
+  if (m2) {
+    const y = new Date().getFullYear();
+    return `${y}-${m2[2].padStart(2, '0')}-${m2[1].padStart(2, '0')}`;
+  }
+  return null;
+}
+
+function parseExplicitType(raw: string): 'income' | 'expense' | null {
+  const s = raw.toLowerCase().trim();
+  if (['thu', 'income', 'thu nhập', 'in', '+'].includes(s)) return 'income';
+  if (['chi', 'expense', 'chi tiêu', 'out', '-'].includes(s)) return 'expense';
+  return null;
+}
+
+export default function ImportModal({ onImported, onClose }: Props) {
+  const [tab, setTab] = useState<'file' | 'text'>('file');
+  const [rows, setRows] = useState<PreviewRow[]>([]);
+  const [fileName, setFileName] = useState('');
+  const [rawText, setRawText] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [done, setDone] = useState(false);
+  const [importedCount, setImportedCount] = useState(0);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Xử lý chuỗi văn bản (từ file hoặc từ ô dán trực tiếp)
+  function processContent(content: string, sourceName = '') {
+    if (sourceName) setFileName(sourceName);
+    setDone(false);
+
+    const lines = content.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    if (!lines.length) {
+      setRows([]);
+      return;
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    const firstLineCols = parseDelimitedLine(lines[0]);
+    const isTableLike =
+      lines[0].toLowerCase().includes('ngày') ||
+      lines[0].toLowerCase().includes('loại') ||
+      lines[0].toLowerCase().includes('số tiền') ||
+      lines[0].toLowerCase().includes('amount') ||
+      (firstLineCols.length >= 3 && lines.length > 1);
+
+    let parsed: PreviewRow[] = [];
+
+    if (isTableLike) {
+      // ── Định dạng bảng (CSV, TSV, bảng Excel) ──────────────────────────
+      const headers = firstLineCols.map(h =>
+        h.toLowerCase()
+          .replace('ngày', 'date')
+          .replace('loại', 'type')
+          .replace('số tiền', 'amount')
+          .replace('mô tả', 'description')
+          .replace('danh mục', 'category')
+          .replace('ghi chú', 'note')
+      );
+
+      const hasHeader =
+        headers.includes('date') ||
+        headers.includes('amount') ||
+        headers.includes('description');
+
+      const dataLines = hasHeader ? lines.slice(1) : lines;
+
+      parsed = dataLines.map((line, idx) => {
+        const cols = parseDelimitedLine(line);
+        if (cols.length < 2) return null;
+
+        let dateStr = '';
+        let typeStr = '';
+        let amountStr = '';
+        let descStr = '';
+        let catStr = '';
+        let noteStr = '';
+
+        if (hasHeader) {
+          const get = (...keys: string[]) => {
+            for (const k of keys) {
+              const i = headers.indexOf(k);
+              if (i >= 0 && cols[i]) return cols[i];
+            }
+            return '';
+          };
+          dateStr = get('date');
+          typeStr = get('type');
+          amountStr = get('amount', 'tiền');
+          descStr = get('description', 'desc', 'mota');
+          catStr = get('category', 'danhmuc');
+          noteStr = get('note', 'ghichu');
+        } else {
+          // Đoán theo thứ tự cột: ngày, loại, tiền, mô tả, danh mục, ghi chú
+          if (parseExplicitDate(cols[0])) {
+            dateStr = cols[0];
+            typeStr = cols[1];
+            amountStr = cols[2];
+            descStr = cols[3] || '';
+            catStr = cols[4] || '';
+            noteStr = cols[5] || '';
+          } else {
+            // Thứ tự: mô tả, tiền, loại, ngày
+            descStr = cols[0];
+            amountStr = cols[1];
+            typeStr = cols[2] || '';
+            dateStr = cols[3] || '';
+          }
+        }
+
+        const amount = parseAmountInput(amountStr || '0');
+        const desc = descStr || cols[0] || `Giao dịch ${idx + 1}`;
+        const guessed = guessCategoryAndType(desc);
+        const type = parseExplicitType(typeStr) || guessed.type;
+        const category = catStr || guessed.category;
+        const date = parseExplicitDate(dateStr) || today;
+
+        const errors: string[] = [];
+        if (!amount || amount <= 0) errors.push('Số tiền chưa đúng');
+        if (!desc) errors.push('Thiếu mô tả');
+
+        return {
+          date,
+          type,
+          amount,
+          description: desc,
+          category,
+          note: noteStr,
+          valid: errors.length === 0,
+          error: errors.join(', ')
+        };
+      }).filter(Boolean) as PreviewRow[];
+    } else {
+      // ── Định dạng câu tự nhiên (file .txt hoặc dán danh sách ghi chú) ──
+      // Ví dụ: "22/10 ăn trưa 20k (ăn với mẹ)"
+      parsed = lines.map(line => {
+        const smart = parseSmartInput(line);
+        const dateParsed = parseDateFromVietnameseText(smart.description);
+        const guessed = guessCategoryAndType(line);
+
+        const desc = dateParsed.cleanText || smart.description || line;
+        const amount = smart.amount || 0;
+
+        const errors: string[] = [];
+        if (!amount || amount <= 0) errors.push('Không nhận diện được số tiền');
+        if (!desc) errors.push('Thiếu mô tả');
+
+        return {
+          date: dateParsed.date || today,
+          type: guessed.type,
+          amount,
+          description: desc,
+          category: guessed.category,
+          note: smart.note,
+          valid: errors.length === 0,
+          error: errors.join(', ')
+        };
+      });
+    }
+
+    setRows(parsed);
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = evt => {
+      const text = evt.target?.result as string;
+      processContent(text, file.name);
+    };
+    reader.readAsText(file, 'utf-8');
+  }
+
+  async function handleImport() {
+    const valid = rows.filter(r => r.valid);
+    if (!valid.length) return;
+    setImporting(true);
+    let count = 0;
+    for (const row of valid) {
+      try {
+        await api.createTransaction({
+          type: row.type,
+          amount: row.amount,
+          description: row.description,
+          category: row.category || undefined,
+          note: row.note,
+          date: row.date,
+        });
+        count++;
+      } catch {
+        // Tiếp tục import các dòng khác nếu 1 dòng lỗi
+      }
+    }
+    setImportedCount(count);
+    setImporting(false);
+    setDone(true);
+    onImported();
+  }
+
+  const validCount = rows.filter(r => r.valid).length;
+  const invalidCount = rows.filter(r => !r.valid).length;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+
+        {/* Tiêu đề Modal */}
+        <div className="flex items-center justify-between p-5 border-b border-slate-100">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center">
+              <Upload className="w-5 h-5 text-blue-500" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-800">Nhập dữ liệu thu chi</h3>
+              <p className="text-xs text-slate-400">Hỗ trợ file .CSV, .TXT hoặc dán trực tiếp</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
+            <X className="w-5 h-5 text-slate-400" />
+          </button>
+        </div>
+
+        {/* Lựa chọn cách nhập: Chọn file hoặc Dán văn bản */}
+        <div className="px-5 pt-3 border-b border-slate-100 flex gap-4">
+          <button
+            type="button"
+            onClick={() => setTab('file')}
+            className={`pb-2.5 text-xs font-semibold flex items-center gap-1.5 border-b-2 transition-colors ${
+              tab === 'file' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <FileText className="w-4 h-4" /> Tải file (.csv / .txt)
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('text')}
+            className={`pb-2.5 text-xs font-semibold flex items-center gap-1.5 border-b-2 transition-colors ${
+              tab === 'text' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <ClipboardList className="w-4 h-4" /> Dán văn bản trực tiếp
+          </button>
+        </div>
+
+        <div className="p-5 flex-1 overflow-y-auto space-y-4">
+
+          {/* Tab 1: Tải file */}
+          {tab === 'file' && (
+            <div>
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".csv,.txt,.tsv"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                className="w-full border-2 border-dashed border-slate-200 rounded-2xl p-6 hover:border-blue-400 hover:bg-blue-50/50 transition-colors flex flex-col items-center gap-2 group"
+              >
+                <div className="w-12 h-12 bg-blue-50 group-hover:bg-blue-100 rounded-2xl flex items-center justify-center transition-colors">
+                  <Upload className="w-6 h-6 text-blue-600" />
+                </div>
+                <span className="text-sm font-semibold text-slate-700">
+                  {fileName ? fileName : 'Bấm để chọn file (.csv hoặc .txt)'}
+                </span>
+                <span className="text-xs text-slate-400">
+                  Tự động nhận diện cả file bảng CSV lẫn file ghi chú câu tự nhiên
+                </span>
+              </button>
+            </div>
+          )}
+
+          {/* Tab 2: Dán trực tiếp */}
+          {tab === 'text' && (
+            <div className="space-y-2">
+              <label className="block text-xs font-medium text-slate-500">
+                Dán danh sách thu chi (mỗi giao dịch 1 dòng):
+              </label>
+              <textarea
+                rows={5}
+                value={rawText}
+                onChange={e => {
+                  setRawText(e.target.value);
+                  processContent(e.target.value, 'Văn bản dán trực tiếp');
+                }}
+                placeholder={"22/10 ăn trưa 20k (ăn với mẹ)\nhôm qua grab 45k\ntiền lương 15tr (tháng 10)\n20/10 mua thuốc 85k"}
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          )}
+
+          {/* Hướng dẫn định dạng ví dụ */}
+          <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 text-xs text-slate-500 space-y-1">
+            <p className="font-semibold text-slate-600 flex items-center gap-1.5">
+              💡 Hỗ trợ cả 2 định dạng:
+            </p>
+            <p>• <b>File .txt câu tự nhiên:</b> <code className="text-blue-600">22/10 ăn trưa 20k (ăn với mẹ)</code>, <code className="text-blue-600">hôm qua grab 45k</code></p>
+            <p>• <b>File .csv dạng bảng:</b> <code className="text-slate-600">Ngày,Loại,Số tiền,Mô tả,Danh mục,Ghi chú</code></p>
+          </div>
+
+          {/* Xem trước bảng dữ liệu đã nhận diện */}
+          {rows.length > 0 && !done && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-semibold text-slate-700">
+                  Xem trước: {rows.length} dòng
+                </p>
+                <div className="flex gap-2 text-xs">
+                  <span className="bg-green-100 text-green-700 px-2.5 py-0.5 rounded-full font-medium">✓ {validCount} hợp lệ</span>
+                  {invalidCount > 0 && (
+                    <span className="bg-red-100 text-red-600 px-2.5 py-0.5 rounded-full font-medium">✗ {invalidCount} lỗi</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="border border-slate-200 rounded-xl overflow-hidden max-h-56 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-50 sticky top-0 border-b border-slate-100">
+                    <tr>
+                      <th className="px-3 py-2 text-left w-6"></th>
+                      <th className="px-3 py-2 text-left text-slate-600 font-semibold">Ngày</th>
+                      <th className="px-3 py-2 text-left text-slate-600 font-semibold">Loại</th>
+                      <th className="px-3 py-2 text-left text-slate-600 font-semibold">Số tiền</th>
+                      <th className="px-3 py-2 text-left text-slate-600 font-semibold">Mô tả</th>
+                      <th className="px-3 py-2 text-left text-slate-600 font-semibold">Danh mục</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r, i) => (
+                      <tr key={i} className={`border-t border-slate-100 ${r.valid ? 'hover:bg-slate-50' : 'bg-red-50/60'}`}>
+                        <td className="px-3 py-2">
+                          {r.valid ? (
+                            <Check className="w-3.5 h-3.5 text-green-500" />
+                          ) : (
+                            <span title={r.error} className="inline-flex">
+                              <AlertCircle className="w-3.5 h-3.5 text-red-400" />
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-slate-600 whitespace-nowrap">
+                          {r.date.split('-').reverse().join('/')}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                            r.type === 'income' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'
+                          }`}>
+                            {r.type === 'income' ? 'Thu' : 'Chi'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 font-bold text-slate-800 whitespace-nowrap">
+                          {formatAmountDisplay(r.amount)}₫
+                        </td>
+                        <td className="px-3 py-2 text-slate-700 max-w-[150px] truncate" title={r.description}>
+                          {r.description}
+                          {r.note && <span className="text-slate-400 ml-1 text-[11px]">({r.note})</span>}
+                        </td>
+                        <td className="px-3 py-2 text-slate-500 max-w-[120px] truncate" title={r.category}>
+                          {r.category}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Thông báo khi import thành công */}
+          {done && (
+            <div className="text-center py-8">
+              <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <Check className="w-8 h-8 text-green-600" />
+              </div>
+              <p className="font-bold text-slate-800 text-base">Nhập dữ liệu thành công!</p>
+              <p className="text-sm text-slate-500 mt-1">Đã lưu <b>{importedCount}</b> giao dịch vào ứng dụng</p>
+            </div>
+          )}
+        </div>
+
+        {/* Nút hành động */}
+        <div className="p-5 border-t border-slate-100 flex gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 font-medium transition-colors"
+          >
+            {done ? 'Đóng' : 'Hủy'}
+          </button>
+          {!done && validCount > 0 && (
+            <button
+              type="button"
+              onClick={handleImport}
+              disabled={importing}
+              className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            >
+              {importing ? 'Đang lưu...' : `Nhập ${validCount} giao dịch`}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
