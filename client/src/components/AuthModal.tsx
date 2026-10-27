@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { api, setStoredToken, type User } from '../lib/api';
-import { Lock, User as UserIcon, LogIn, UserPlus, ShieldCheck, Eye, EyeOff, CheckSquare, Square } from 'lucide-react';
+import { Lock, User as UserIcon, LogIn, UserPlus, ShieldCheck, Eye, EyeOff, CheckSquare, Square, Heart, Sparkles } from 'lucide-react';
 
 interface Props {
   onSuccess: (user: User) => void;
@@ -51,14 +51,17 @@ export default function AuthModal({ onSuccess }: Props) {
     <div className="fixed inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-100 dark:border-zinc-800 transition-colors">
         {/* Header với icon */}
-        <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-6 text-white text-center">
-          <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center mx-auto mb-3 backdrop-blur-md border border-white/20">
-            <span className="text-2xl font-bold">₫</span>
+        <div className="bg-gradient-to-br from-blue-600 via-indigo-600 to-indigo-700 p-6 text-white text-center relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-2xl pointer-events-none" />
+          <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center mx-auto mb-3 backdrop-blur-md border border-white/20 shadow-inner">
+            <span className="text-2xl font-black">₫</span>
           </div>
-          <h2 className="text-xl font-bold">FinanceTracker</h2>
-          <p className="text-xs text-blue-100 mt-1 flex items-center justify-center gap-1">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            Sổ thu chi cá nhân an toàn & bảo mật
+          <h2 className="text-2xl font-black tracking-tight flex items-center justify-center gap-1.5">
+            <span>Tiền Đâu Rồi?</span>
+          </h2>
+          <p className="text-xs text-blue-100/90 mt-1 flex items-center justify-center gap-1 font-medium">
+            <ShieldCheck className="w-3.5 h-3.5 text-blue-200" />
+            Sổ thu chi &amp; quản lý tài chính thông minh
           </p>
         </div>
 
@@ -185,6 +188,16 @@ export default function AuthModal({ onSuccess }: Props) {
           <p className="text-[11px] text-center text-slate-400 dark:text-zinc-500 pt-1">
             Mỗi người có một tài khoản riêng. Dữ liệu luôn hoàn toàn bảo mật và không ai khác có thể xem.
           </p>
+
+          {/* Watermark / Tác giả */}
+          <div className="pt-2 border-t border-slate-100 dark:border-zinc-800/80 flex flex-col items-center justify-center gap-1 text-center">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-50 dark:bg-zinc-800/80 border border-slate-200/60 dark:border-zinc-700/60 text-[11px] text-slate-500 dark:text-zinc-400 font-medium select-none shadow-2xs">
+              <Sparkles className="w-3 h-3 text-amber-500 shrink-0" />
+              <span>Designed &amp; Crafted with</span>
+              <Heart className="w-3 h-3 text-rose-500 fill-rose-500 shrink-0 animate-pulse" />
+              <span>by <strong className="text-slate-800 dark:text-zinc-100 font-bold">Hoàng</strong></span>
+            </div>
+          </div>
         </form>
       </div>
     </div>

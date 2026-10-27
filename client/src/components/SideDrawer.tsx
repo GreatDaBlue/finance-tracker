@@ -37,7 +37,8 @@ import {
   Trash2,
   FileSpreadsheet,
   FileJson,
-  Key
+  Key,
+  Heart
 } from 'lucide-react';
 
 interface Props {
@@ -496,6 +497,16 @@ export default function SideDrawer({
               <LogOut className="w-3.5 h-3.5 shrink-0" />
               <span>Đăng xuất tài khoản</span>
             </button>
+
+            {/* Watermark tác giả */}
+            <div className="pt-1 pb-0.5 text-center select-none">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white dark:bg-zinc-800/80 border border-slate-200/60 dark:border-zinc-700/60 text-[10.5px] text-slate-500 dark:text-zinc-400 font-medium shadow-2xs">
+                <Sparkles className="w-3 h-3 text-amber-500 shrink-0" />
+                <span>Designed &amp; Crafted by</span>
+                <strong className="text-slate-800 dark:text-zinc-100 font-bold">Hoàng</strong>
+                <Heart className="w-2.5 h-2.5 text-rose-500 fill-rose-500 shrink-0 animate-pulse" />
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -958,6 +969,12 @@ export default function SideDrawer({
             </div>
 
             <div className="bg-slate-50 dark:bg-zinc-800/60 p-3 rounded-2xl text-xs space-y-1.5 text-left border border-slate-100 dark:border-zinc-800">
+              <div className="flex justify-between text-slate-600 dark:text-zinc-300">
+                <span>Thiết kế &amp; Tác giả:</span>
+                <strong className="text-blue-600 dark:text-blue-400 font-bold flex items-center gap-1">
+                  Hoàng <Heart className="w-3 h-3 text-rose-500 fill-rose-500 inline" />
+                </strong>
+              </div>
               <div className="flex justify-between text-slate-600 dark:text-zinc-300">
                 <span>Phiên bản:</span>
                 <strong className="text-blue-600">v1.2.0</strong>
