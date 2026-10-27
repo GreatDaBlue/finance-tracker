@@ -250,6 +250,7 @@ export function getCategoryIcon(cat: string): string {
   if (/Mua sắm|Giải trí/i.test(cat)) return '🛍️';
   if (/Giáo dục|Học/i.test(cat)) return '📚';
   if (/lương/i.test(cat)) return '💵';
+  if (/Quà|Tặng|Cho|Biếu/i.test(cat)) return '🎁';
   if (/Thu nhập/i.test(cat)) return '💰';
   if (/Tiết kiệm|Đầu tư/i.test(cat)) return '📈';
   if (/Sửa chữa/i.test(cat)) return '🔧';
@@ -258,16 +259,44 @@ export function getCategoryIcon(cat: string): string {
 
 /**
  * Phân loại loại giao dịch và danh mục nhanh từ văn bản (dành cho file txt và parse tự động)
- * Tự động gắn danh mục và icon chuẩn:
- *   - xăng, xe, gửi xe → Xe cộ 🛵
- *   - cơm, phở, trà sữa, cafe → Ăn uống 🍜
- *   - gym, thuốc → Sức khỏe 💊
+ * Phân biệt rõ ràng giữa CHO và NHẬN:
+ *   - "ABC cho": ABC cho mình -> Được nhận -> THU NHẬP (income)
+ *   - "Cho ABC": Mình cho người khác -> Mất tiền -> CHI TIÊU (expense)
  */
 export function guessCategoryAndType(text: string): { type: 'income' | 'expense'; category: string } {
   const lower = text.toLowerCase();
+  const trimmed = text.trim();
 
-  // 1. Nhận diện thu nhập rõ ràng
-  const hasDirectIncomeWord = matchViWords(lower, 'lương|salary|thưởng|bonus|thu nhập|cổ tức|lãi|lãi suất|freelance|nhận tiền|tiền vào|được cho|mẹ cho|bố cho|cho tiền|được tặng|lì xì|trúng thưởng|hoàn tiền|thu nợ|đòi nợ|\\+');
+  // 1. Phân biệt rõ việc CHO và NHẬN:
+  // A. Trường hợp người khác cho mình ("ABC cho ...", "được cho ...", "được ABC cho ...", "ABC cho mình ...")
+  // => MÌNH ĐƯỢC NHẬN = THU NHẬP (INCOME)
+  if (/^được\s+(?:(?:tiền\s+)?cho|tặng|lì xì|biếu)(?:\s+\d|;|,|$|\s+)/iu.test(trimmed)) {
+    return { type: 'income', category: 'Được tặng & Cho' };
+  }
+
+  const aiDoChoMatch = trimmed.match(/^(?:được\s+)?([^\d,.;]+?)\s+(?:cho|lì xì|tặng|biếu)(?:\s+(?:tiền|tôi|mình|em|con|cháu|bản\s*thân))?(?:\s+\d|;|,|$)/iu);
+  if (aiDoChoMatch) {
+    const subject = aiDoChoMatch[1].trim();
+    // Nếu chủ ngữ KHÔNG PHẢI là ngôi thứ nhất ("tôi", "mình", "tao")
+    if (!/^(?:tôi|mình|tao)$/iu.test(subject)) {
+      return { type: 'income', category: 'Được tặng & Cho' };
+    }
+  }
+
+  // B. Trường hợp mình cho người khác ("cho ABC ...", "cho tiền ABC ...", "tôi cho ABC ...", "mình cho ABC ...", "biếu ABC ...", "tặng ABC ...")
+  // => MÌNH CHO NGƯỜI KHÁC = MÌNH MẤT TIỀN = CHI TIÊU (EXPENSE)
+  const choNguoiKhacMatch = trimmed.match(/^(?:tôi\s+|mình\s+|tao\s+)?(?:cho(?:\s+tiền)?|biếu|tặng|lì xì|mừng)\s+([^\d,.;]+?)(?:\s+\d|;|,|$)/iu);
+  if (choNguoiKhacMatch) {
+    return { type: 'expense', category: 'Quà tặng & Cho biếu' };
+  }
+
+  // C. Nếu chỉ ghi "cho 500k", "cho tiền 500k", "từ thiện 100k", "mừng cưới 500k"
+  if (/^(?:tôi\s+|mình\s+|tao\s+)?(?:cho(?:\s+tiền)?|từ thiện|mừng cưới|phúng viếng)(?:\s+\d|;|,|$)/iu.test(trimmed)) {
+    return { type: 'expense', category: 'Quà tặng & Cho biếu' };
+  }
+
+  // 2. Nhận diện các khoản thu nhập rõ ràng khác
+  const hasDirectIncomeWord = matchViWords(lower, 'lương|salary|thưởng|bonus|thu nhập|cổ tức|lãi|lãi suất|freelance|nhận tiền|tiền vào|được tặng|lì xì|trúng thưởng|hoàn tiền|thu nợ|đòi nợ|\\+');
   const isSelling = matchViWords(lower, 'bán|thanh lý|sang nhượng') && !matchViWords(lower, 'mua|quán|tiệm|chỗ|hàng');
   const isReceiving = matchViWords(lower, 'nhận|kiếm được|thu được') && !matchViWords(lower, 'nhận phòng|nhận hàng');
 

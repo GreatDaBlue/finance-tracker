@@ -17,6 +17,8 @@ export const DEFAULT_CATEGORIES: CustomCategory[] = [
   { id: 'cat_salary', name: 'Thu nhập lương', icon: '💼', color: '#10b981', type: 'income', isDefault: true },
   { id: 'cat_other_income', name: 'Thu nhập khác', icon: '💰', color: '#14b8a6', type: 'income', isDefault: true },
   { id: 'cat_investment', name: 'Tiết kiệm & Đầu tư', icon: '💳', color: '#06b6d4', type: 'both', isDefault: true },
+  { id: 'cat_gift_expense', name: 'Quà tặng & Cho biếu', icon: '🎁', color: '#f43f5e', type: 'expense', isDefault: true },
+  { id: 'cat_gift_income', name: 'Được tặng & Cho', icon: '🎁', color: '#10b981', type: 'income', isDefault: true },
   { id: 'cat_repair', name: 'Sửa chữa & Bảo trì', icon: '🔧', color: '#f97316', type: 'expense', isDefault: true },
   { id: 'cat_other', name: 'Khác', icon: '❓', color: '#64748b', type: 'both', isDefault: true }
 ];

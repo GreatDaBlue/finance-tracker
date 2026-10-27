@@ -25,6 +25,20 @@ async function layDanhMuc(): Promise<Category[]> {
  * Phân loại một giao dịch vào danh mục phù hợp dựa trên từ khóa.
  */
 export async function classify(description: string, type: 'income' | 'expense'): Promise<string> {
+  const trimmed = description.trim();
+
+  // Nhận diện Quà tặng / Cho biếu:
+  if (type === 'income') {
+    if (/^được\s+(?:(?:tiền\s+)?cho|tặng|lì xì|biếu)/iu.test(trimmed) ||
+        /^(?:được\s+)?[^\d,.;]+?\s+(?:cho|lì xì|tặng|biếu)/iu.test(trimmed)) {
+      return 'Được tặng & Cho';
+    }
+  } else {
+    if (/^(?:tôi\s+|mình\s+|tao\s+)?(?:cho(?:\s+tiền)?|biếu|tặng|lì xì|mừng|từ thiện)\b/iu.test(trimmed)) {
+      return 'Quà tặng & Cho biếu';
+    }
+  }
+
   // Ưu tiên các từ khóa thông dụng theo yêu cầu chuẩn:
   if (/(?:^|[^\p{L}\p{N}])(cơm|phở|trà sữa|cafe|cà phê|ăn|uống|bún|bánh|mì|cháo|thịt|cá|rau|lẩu|nướng|buffet|chợ|siêu thị)(?:[^\p{L}\p{N}]|$)/iu.test(description)) {
     return 'Ăn uống';
@@ -64,6 +78,7 @@ export async function layIconDanhMuc(tenDanhMuc: string): Promise<string> {
   if (/Mua sắm|Giải trí/i.test(tenDanhMuc)) return '🛍️';
   if (/Giáo dục|Học/i.test(tenDanhMuc)) return '📚';
   if (/Lương/i.test(tenDanhMuc)) return '💵';
+  if (/Quà|Tặng|Cho|Biếu/i.test(tenDanhMuc)) return '🎁';
   if (/Thu nhập/i.test(tenDanhMuc)) return '💰';
   if (/Tiết kiệm|Đầu tư/i.test(tenDanhMuc)) return '📈';
   const row = await db.prepare('SELECT icon FROM categories WHERE name = ?').get<{ icon: string }>(tenDanhMuc);
