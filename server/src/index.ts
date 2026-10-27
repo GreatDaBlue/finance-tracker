@@ -1,11 +1,24 @@
+import dotenv from 'dotenv';
+import path from 'path';
+
+// Nạp biến môi trường từ .env.local và .env ở cả thư mục gốc dự án và thư mục server
+dotenv.config({ path: path.resolve(__dirname, '../../.env.local') });
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+dotenv.config();
+
 import express from 'express';
 import cors from 'cors';
-import path from 'path';
 import fs from 'fs';
 import { initDB } from './lib/db';
 import authRouter from './routes/auth';
 import transactionsRouter from './routes/transactions';
 import statsRouter from './routes/stats';
+import budgetsRouter from './routes/budgets';
+import debtsRouter from './routes/debts';
+import recurringRouter from './routes/recurring';
+import creditCardsRouter from './routes/creditCards';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -18,6 +31,10 @@ app.use(express.json());
 app.use('/api/auth', authRouter);                 // Đăng ký, đăng nhập, tài khoản
 app.use('/api/transactions', transactionsRouter); // Quản lý giao dịch thu chi
 app.use('/api/stats', statsRouter);               // Thống kê & báo cáo
+app.use('/api/budgets', budgetsRouter);           // Quản lý ngân sách & cảnh báo chi tiêu
+app.use('/api/debts', debtsRouter);               // Quản lý sổ nợ (không tính vào thu chi)
+app.use('/api/recurring', recurringRouter);       // Quản lý khoản chi lặp lại định kỳ
+app.use('/api/credit-cards', creditCardsRouter);   // Quản lý nợ thẻ tín dụng
 
 // ── Kiểm tra sức khỏe server ───────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {

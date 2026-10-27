@@ -3,6 +3,7 @@ import { db } from '../lib/db';
 import { classify } from '../lib/classifier';
 import { parseDateFromText, formatDate } from '../lib/dateParser';
 import { requireAuth, AuthenticatedRequest } from '../lib/auth';
+import { processRecurringForUser } from './recurring';
 
 const router = Router();
 
@@ -21,15 +22,21 @@ interface Transaction {
 }
 
 // ── GET /api/transactions ──────────────────────────────────────────────────
-// Lấy danh sách giao dịch của riêng người dùng đang đăng nhập
-router.get('/', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+router.get('/', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   const userId = req.user!.id;
+  try {
+    await processRecurringForUser(userId);
+  } catch (err) {
+    console.error('Error processing recurring transactions:', err);
+  }
   const {
     type,
     category,
     dateFrom,
     dateTo,
     search,
+    minAmount,
+    maxAmount,
     limit = '50',
     offset = '0',
     sortBy = 'date',
@@ -59,6 +66,20 @@ router.get('/', requireAuth, (req: AuthenticatedRequest, res: Response) => {
     conditions.push('(description LIKE ? OR note LIKE ?)');
     params.push(`%${search}%`, `%${search}%`);
   }
+  if (minAmount !== undefined && minAmount !== '') {
+    const min = Number(minAmount);
+    if (!isNaN(min)) {
+      conditions.push('amount >= ?');
+      params.push(min);
+    }
+  }
+  if (maxAmount !== undefined && maxAmount !== '') {
+    const max = Number(maxAmount);
+    if (!isNaN(max)) {
+      conditions.push('amount <= ?');
+      params.push(max);
+    }
+  }
 
   const where = `WHERE ${conditions.join(' AND ')}`;
   const validSortCols = ['date', 'amount', 'created_at', 'category'];
@@ -67,20 +88,21 @@ router.get('/', requireAuth, (req: AuthenticatedRequest, res: Response) => {
   const lim = Math.min(parseInt(limit, 10) || 50, 500);
   const off = parseInt(offset, 10) || 0;
 
-  const rows = db.prepare(
+  const rows = await db.prepare(
     `SELECT * FROM transactions ${where} ORDER BY ${col} ${dir}, id DESC LIMIT ? OFFSET ?`
-  ).all(...params, lim, off) as Transaction[];
+  ).all<Transaction>(...params, lim, off);
 
-  const total = (
-    db.prepare(`SELECT COUNT(*) as c FROM transactions ${where}`).get(...params) as { c: number }
-  ).c;
+  const countRow = await db.prepare(
+    `SELECT COUNT(*) as c FROM transactions ${where}`
+  ).get<{ c: string | number }>(...params);
+
+  const total = Number(countRow?.c || 0);
 
   res.json({ data: rows, total, limit: lim, offset: off });
 });
 
 // ── POST /api/transactions ─────────────────────────────────────────────────
-// Thêm giao dịch mới cho người dùng
-router.post('/', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+router.post('/', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   const userId = req.user!.id;
   const { type, amount, description, category: manualCategory, note, date: manualDate } = req.body as {
     type: 'income' | 'expense';
@@ -112,27 +134,75 @@ router.post('/', requireAuth, (req: AuthenticatedRequest, res: Response) => {
     cleanDescription = parsed.cleanText || description.trim();
   }
 
-  const category = manualCategory || classify(cleanDescription, type);
+  const category = manualCategory || (await classify(cleanDescription, type));
 
-  const result = db.prepare(
+  const result = await db.prepare(
     `INSERT INTO transactions (user_id, date, type, amount, description, category, note)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   ).run(userId, resolvedDate, type, amount, cleanDescription, category, note || '');
 
-  const created = db.prepare('SELECT * FROM transactions WHERE id = ?').get(result.lastInsertRowid) as Transaction;
+  const created = await db.prepare('SELECT * FROM transactions WHERE id = ?').get<Transaction>(result.lastInsertRowid);
   return res.status(201).json(created);
 });
 
+// ── POST /api/transactions/batch (Lưu nhiều giao dịch cùng lúc) ───────────
+router.post('/batch', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.id;
+  const { transactions } = req.body as {
+    transactions: Array<{
+      type: 'income' | 'expense';
+      amount: number;
+      description: string;
+      category?: string;
+      note?: string;
+      date?: string;
+    }>;
+  };
+
+  if (!Array.isArray(transactions) || transactions.length === 0) {
+    return res.status(400).json({ error: 'Danh sách giao dịch không hợp lệ' });
+  }
+
+  const createdList: Transaction[] = [];
+
+  for (const item of transactions) {
+    if (!item.type || !item.amount || !item.description) continue;
+    if (typeof item.amount !== 'number' || item.amount <= 0) continue;
+
+    let resolvedDate: string;
+    let cleanDescription = item.description.trim();
+
+    if (item.date) {
+      resolvedDate = item.date;
+    } else {
+      const parsed = parseDateFromText(item.description, new Date());
+      resolvedDate = formatDate(parsed.date);
+      cleanDescription = parsed.cleanText || item.description.trim();
+    }
+
+    const category = item.category || (await classify(cleanDescription, item.type));
+
+    const result = await db.prepare(
+      `INSERT INTO transactions (user_id, date, type, amount, description, category, note)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(userId, resolvedDate, item.type, item.amount, cleanDescription, category, item.note || '');
+
+    const created = await db.prepare('SELECT * FROM transactions WHERE id = ?').get<Transaction>(result.lastInsertRowid);
+    if (created) createdList.push(created);
+  }
+
+  return res.status(201).json({ data: createdList, count: createdList.length });
+});
+
 // ── POST /api/transactions/classify ───────────────────────────────────────
-// Xem trước phân loại
-router.post('/classify', (req: AuthenticatedRequest, res: Response) => {
+router.post('/classify', async (req: AuthenticatedRequest, res: Response) => {
   const { description, type } = req.body as { description: string; type: 'income' | 'expense' };
   if (!description || !type) {
     return res.status(400).json({ error: 'Cần có description và type' });
   }
 
   const parsed = parseDateFromText(description, new Date());
-  const category = classify(parsed.cleanText || description, type);
+  const category = await classify(parsed.cleanText || description, type);
 
   return res.json({
     category,
@@ -142,13 +212,12 @@ router.post('/classify', (req: AuthenticatedRequest, res: Response) => {
 });
 
 // ── PUT /api/transactions/:id ─────────────────────────────────────────────
-// Cập nhật giao dịch (chỉ sửa được giao dịch của chính mình)
-router.put('/:id', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+router.put('/:id', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   const userId = req.user!.id;
   const { id } = req.params;
   const { type, amount, description, category, note, date } = req.body as Partial<Transaction>;
 
-  const existing = db.prepare('SELECT * FROM transactions WHERE id = ? AND user_id = ?').get(id, userId) as Transaction | undefined;
+  const existing = await db.prepare('SELECT * FROM transactions WHERE id = ? AND user_id = ?').get<Transaction>(id, userId);
   if (!existing) {
     return res.status(404).json({ error: 'Không tìm thấy giao dịch hoặc bạn không có quyền sửa' });
   }
@@ -162,24 +231,23 @@ router.put('/:id', requireAuth, (req: AuthenticatedRequest, res: Response) => {
     note: note ?? existing.note
   };
 
-  db.prepare(
+  await db.prepare(
     `UPDATE transactions SET date=?, type=?, amount=?, description=?, category=?, note=? WHERE id=? AND user_id=?`
   ).run(updated.date, updated.type, updated.amount, updated.description, updated.category, updated.note, id, userId);
 
-  const result = db.prepare('SELECT * FROM transactions WHERE id = ?').get(id) as Transaction;
+  const result = await db.prepare('SELECT * FROM transactions WHERE id = ?').get<Transaction>(id);
   return res.json(result);
 });
 
 // ── DELETE /api/transactions/:id ──────────────────────────────────────────
-// Xóa giao dịch (chỉ xóa được giao dịch của chính mình)
-router.delete('/:id', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+router.delete('/:id', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   const userId = req.user!.id;
   const { id } = req.params;
-  const existing = db.prepare('SELECT * FROM transactions WHERE id = ? AND user_id = ?').get(id, userId);
+  const existing = await db.prepare('SELECT * FROM transactions WHERE id = ? AND user_id = ?').get(id, userId);
   if (!existing) {
     return res.status(404).json({ error: 'Không tìm thấy giao dịch hoặc bạn không có quyền xóa' });
   }
-  db.prepare('DELETE FROM transactions WHERE id = ? AND user_id = ?').run(id, userId);
+  await db.prepare('DELETE FROM transactions WHERE id = ? AND user_id = ?').run(id, userId);
   return res.json({ success: true });
 });
 

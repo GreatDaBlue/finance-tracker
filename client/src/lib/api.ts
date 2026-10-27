@@ -4,6 +4,8 @@ export interface User {
   id: number;
   username: string;
   name: string;
+  avatar?: string;
+  email?: string;
 }
 
 export interface AuthResponse {
@@ -36,10 +38,24 @@ export interface FilterParams {
   dateFrom?: string;   // YYYY-MM-DD
   dateTo?: string;     // YYYY-MM-DD
   search?: string;
+  minAmount?: number;
+  maxAmount?: number;
   limit?: number;
   offset?: number;
   sortBy?: 'date' | 'amount' | 'created_at';
   sortDir?: 'ASC' | 'DESC';
+}
+
+export interface PeriodComparison {
+  prevIncome: number;
+  prevExpense: number;
+  prevBalance: number;
+  expenseChangePct: number | null;
+  incomeChangePct: number | null;
+  expenseToIncomeRatio: number | null;
+  savingsRate: number;
+  prevDateFrom: string;
+  prevDateTo: string;
 }
 
 export interface SummaryStats {
@@ -47,6 +63,23 @@ export interface SummaryStats {
   totalExpense: number;
   balance: number;
   count: number;
+  incomeCount?: number;
+  expenseCount?: number;
+  comparison?: PeriodComparison;
+}
+
+export interface RecurringTransaction {
+  id: number;
+  user_id?: number;
+  type: 'income' | 'expense';
+  amount: number;
+  description: string;
+  category: string;
+  note: string;
+  day_of_month: number;
+  is_active: number;
+  last_generated_month: string;
+  created_at: string;
 }
 
 export interface CategoryStat {
@@ -74,19 +107,147 @@ export interface NaturalQueryResult {
   category?: string;
   dateFrom?: string;
   dateTo?: string;
+  minAmount?: number;
+  maxAmount?: number;
   description: string;
+}
+
+export interface BudgetItem {
+  id: number;
+  category: string;
+  amount: number;
+  spent: number;
+  remaining: number;
+  actualRatio: number;
+  percentage: number;
+  expectedSpendToDate: number;
+  status: 'GOOD' | 'WARNING' | 'EXCEEDED';
+  message: string;
+}
+
+export interface BudgetResponse {
+  month: string;
+  currentDay: number;
+  totalDays: number;
+  expectedPaceRatio: number;
+  hasOverpacedAlert: boolean;
+  budgets: BudgetItem[];
+}
+
+export interface Debt {
+  id: number;
+  user_id?: number;
+  type: 'lend' | 'borrow'; // 'lend': Cho vay (Người khác nợ mình) | 'borrow': Đi vay (Mình nợ người khác)
+  person: string;
+  amount: number;
+  paid_amount: number;
+  remaining: number;
+  description: string;
+  date: string;
+  due_date: string;
+  status: 'pending' | 'settled';
+  created_at: string;
+}
+
+export interface DebtSummary {
+  totalLendRemaining: number;
+  totalBorrowRemaining: number;
+  settledCount: number;
+  pendingCount: number;
+}
+
+export interface DebtListResponse {
+  data: Debt[];
+  summary: DebtSummary;
+}
+
+export interface CreditCard {
+  id: number;
+  user_id: number;
+  card_name: string;
+  bank_name: string;
+  balance: number;
+  paid_amount: number;
+  remaining: number;
+  credit_limit: number;
+  due_date: string;
+  statement_day: number;
+  status: 'pending' | 'settled';
+  note: string;
+  daysRemaining?: number;
+  created_at: string;
+}
+
+export interface CreditCardSummary {
+  totalDebtRemaining: number;
+  totalPaid: number;
+  settledCount: number;
+  pendingCount: number;
+  dueSoonCount: number;
+  overdueCount: number;
+}
+
+export interface CreditCardListResponse {
+  data: CreditCard[];
+  summary: CreditCardSummary;
 }
 
 const BASE = '/api';
 const TOKEN_KEY = 'financetracker_token';
+const USER_KEY = 'financetracker_user';
 
 export function getStoredToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
+  return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY);
 }
 
-export function setStoredToken(token: string | null): void {
-  if (token) localStorage.setItem(TOKEN_KEY, token);
-  else localStorage.removeItem(TOKEN_KEY);
+export function setStoredToken(token: string | null, remember = true): void {
+  if (token) {
+    if (remember) {
+      localStorage.setItem(TOKEN_KEY, token);
+      sessionStorage.removeItem(TOKEN_KEY);
+    } else {
+      sessionStorage.setItem(TOKEN_KEY, token);
+      localStorage.removeItem(TOKEN_KEY);
+    }
+  } else {
+    localStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem(TOKEN_KEY);
+  }
+}
+
+export function getStoredUser(): User | null {
+  const str = localStorage.getItem(USER_KEY) || sessionStorage.getItem(USER_KEY);
+  if (!str) return null;
+  try {
+    return JSON.parse(str);
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredUser(user: User | null, remember = true): void {
+  if (user) {
+    const json = JSON.stringify(user);
+    if (remember) {
+      localStorage.setItem(USER_KEY, json);
+      sessionStorage.removeItem(USER_KEY);
+    } else {
+      sessionStorage.setItem(USER_KEY, json);
+      localStorage.removeItem(USER_KEY);
+    }
+  } else {
+    localStorage.removeItem(USER_KEY);
+    sessionStorage.removeItem(USER_KEY);
+  }
+}
+
+export function getUserDisplayName(user?: User | null): string {
+  if (user?.name?.trim()) return user.name.trim();
+  if (user?.username?.trim()) return user.username.trim();
+  const stored = getStoredUser();
+  if (stored?.name?.trim()) return stored.name.trim();
+  if (stored?.username?.trim()) return stored.username.trim();
+  return 'bạn';
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -139,6 +300,20 @@ export const api = {
     return request<{ user: User }>('/auth/me');
   },
 
+  updateProfile(data: { name?: string; avatar?: string; email?: string }): Promise<{ user: User }> {
+    return request<{ user: User }>('/auth/profile', {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  },
+
+  changePassword(data: { oldPassword: string; newPassword: string }): Promise<{ success: boolean; message: string }> {
+    return request<{ success: boolean; message: string }>('/auth/change-password', {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  },
+
   logout(): Promise<{ success: boolean }> {
     return request<{ success: boolean }>('/auth/logout', { method: 'POST' }).finally(() => {
       setStoredToken(null);
@@ -153,6 +328,8 @@ export const api = {
     if (params.dateFrom) qs.set('dateFrom', params.dateFrom);
     if (params.dateTo) qs.set('dateTo', params.dateTo);
     if (params.search) qs.set('search', params.search);
+    if (params.minAmount !== undefined) qs.set('minAmount', String(params.minAmount));
+    if (params.maxAmount !== undefined) qs.set('maxAmount', String(params.maxAmount));
     if (params.limit) qs.set('limit', String(params.limit));
     if (params.offset) qs.set('offset', String(params.offset));
     if (params.sortBy) qs.set('sortBy', params.sortBy);
@@ -172,6 +349,20 @@ export const api = {
     return request<Transaction>('/transactions', {
       method: 'POST',
       body: JSON.stringify(data)
+    });
+  },
+
+  createBatchTransactions(transactions: Array<{
+    type: 'income' | 'expense';
+    amount: number;
+    description: string;
+    category?: string;
+    note?: string;
+    date?: string;
+  }>): Promise<{ data: Transaction[]; count: number }> {
+    return request<{ data: Transaction[]; count: number }>('/transactions/batch', {
+      method: 'POST',
+      body: JSON.stringify({ transactions })
     });
   },
 
@@ -213,7 +404,7 @@ export const api = {
     return request<CategoryStat[]>(`/stats/by-category${query ? `?${query}` : ''}`);
   },
 
-  getDateStats(params: FilterParams & { group?: 'day' | 'month' | 'year' } = {}): Promise<DateStat[]> {
+  getDateStats(params: FilterParams & { group?: 'day' | 'month' | 'quarter' | 'year' } = {}): Promise<DateStat[]> {
     const qs = new URLSearchParams();
     if (params.type) qs.set('type', params.type);
     if (params.dateFrom) qs.set('dateFrom', params.dateFrom);
@@ -227,6 +418,133 @@ export const api = {
     return request<NaturalQueryResult>('/stats/query', {
       method: 'POST',
       body: JSON.stringify({ query })
+    });
+  },
+
+  // ── Budgets ──────────────────────────────────────────────────────────────
+  getBudgets(month?: string): Promise<BudgetResponse> {
+    const qs = month ? `?month=${month}` : '';
+    return request<BudgetResponse>(`/budgets${qs}`);
+  },
+
+  setBudget(data: { month: string; category?: string; amount: number }): Promise<{ success: boolean }> {
+    return request<{ success: boolean }>('/budgets', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  },
+
+  deleteBudget(id: number): Promise<{ success: boolean }> {
+    return request<{ success: boolean }>(`/budgets/${id}`, {
+      method: 'DELETE'
+    });
+  },
+
+  // ── Debts (Sổ nợ — không tính vào thu chi) ────────────────────────────────
+  getDebts(): Promise<DebtListResponse> {
+    return request<DebtListResponse>('/debts');
+  },
+
+  createDebt(data: {
+    type: 'lend' | 'borrow';
+    person: string;
+    amount: number;
+    description?: string;
+    date?: string;
+    due_date?: string;
+  }): Promise<Debt> {
+    return request<Debt>('/debts', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  },
+
+  updateDebt(id: number, data: Partial<Debt>): Promise<Debt> {
+    return request<Debt>(`/debts/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  },
+
+  deleteDebt(id: number): Promise<{ success: boolean }> {
+    return request<{ success: boolean }>(`/debts/${id}`, {
+      method: 'DELETE'
+    });
+  },
+
+  // ── Credit Cards (Nợ thẻ tín dụng) ─────────────────────────────────────────
+  getCreditCards(): Promise<CreditCardListResponse> {
+    return request<CreditCardListResponse>('/credit-cards');
+  },
+
+  createCreditCard(data: {
+    card_name: string;
+    bank_name?: string;
+    balance: number;
+    credit_limit?: number;
+    due_date: string;
+    statement_day?: number;
+    note?: string;
+  }): Promise<CreditCard> {
+    return request<CreditCard>('/credit-cards', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  },
+
+  updateCreditCard(id: number, data: Partial<CreditCard>): Promise<CreditCard> {
+    return request<CreditCard>(`/credit-cards/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  },
+
+  payCreditCard(id: number, data: {
+    amount: number;
+    payment_date?: string;
+    note?: string;
+    create_expense?: boolean;
+  }): Promise<{ card: CreditCard; message: string }> {
+    return request<{ card: CreditCard; message: string }>(`/credit-cards/${id}/pay`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  },
+
+  deleteCreditCard(id: number): Promise<{ success: boolean }> {
+    return request<{ success: boolean }>(`/credit-cards/${id}`, {
+      method: 'DELETE'
+    });
+  },
+
+  getRecurring(): Promise<{ data: RecurringTransaction[] }> {
+    return request<{ data: RecurringTransaction[] }>('/recurring');
+  },
+
+  createRecurring(data: {
+    type: 'income' | 'expense';
+    amount: number;
+    description: string;
+    category?: string;
+    note?: string;
+    day_of_month?: number;
+  }): Promise<RecurringTransaction> {
+    return request<RecurringTransaction>('/recurring', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  },
+
+  updateRecurring(id: number, data: Partial<RecurringTransaction>): Promise<RecurringTransaction> {
+    return request<RecurringTransaction>(`/recurring/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  },
+
+  deleteRecurring(id: number): Promise<{ success: boolean }> {
+    return request<{ success: boolean }>(`/recurring/${id}`, {
+      method: 'DELETE'
     });
   }
 };

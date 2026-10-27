@@ -10,26 +10,35 @@ interface Category {
 }
 
 // Lấy tất cả danh mục từ database
-function layDanhMuc(): Category[] {
-  const rows = db.prepare('SELECT * FROM categories').all() as Array<{
-    id: number; name: string; type: string; icon: string; keywords: string;
-  }>;
-  return rows.map(r => ({ ...r, keywords: JSON.parse(r.keywords) as string[] }));
+async function layDanhMuc(): Promise<Category[]> {
+  const rows = await db.prepare('SELECT * FROM categories').all<{
+    id: number; name: string; type: string; icon: string; keywords: string | string[];
+  }>();
+
+  return rows.map(r => ({
+    ...r,
+    keywords: typeof r.keywords === 'string' ? JSON.parse(r.keywords) : (r.keywords || [])
+  }));
 }
 
 /**
  * Phân loại một giao dịch vào danh mục phù hợp dựa trên từ khóa.
- *
- * Ưu tiên:
- *  1. Danh mục cùng loại (thu hoặc chi) → đối chiếu từ khóa
- *  2. Danh mục loại khác → đối chiếu từ khóa
- *  3. Không khớp → trả về 'Khác'
  */
-export function classify(description: string, type: 'income' | 'expense'): string {
-  const text = chuanHoaVanBan(description);
-  const danhMucList = layDanhMuc();
+export async function classify(description: string, type: 'income' | 'expense'): Promise<string> {
+  // Ưu tiên các từ khóa thông dụng theo yêu cầu chuẩn:
+  if (/(?:^|[^\p{L}\p{N}])(cơm|phở|trà sữa|cafe|cà phê|ăn|uống|bún|bánh|mì|cháo|thịt|cá|rau|lẩu|nướng|buffet|chợ|siêu thị)(?:[^\p{L}\p{N}]|$)/iu.test(description)) {
+    return 'Ăn uống';
+  }
+  if (/(?:^|[^\p{L}\p{N}])(xăng|xe|gửi xe|đổ xăng|bãi xe|đậu xe|rửa xe|sửa xe|thay nhớt|grab|taxi|bus)(?:[^\p{L}\p{N}]|$)/iu.test(description)) {
+    return 'Xe cộ';
+  }
+  if (/(?:^|[^\p{L}\p{N}])(gym|thuốc|mua thuốc|khám|bệnh viện|bác sĩ|nha khoa|răng|fitness|yoga|spa)(?:[^\p{L}\p{N}]|$)/iu.test(description)) {
+    return 'Sức khỏe';
+  }
 
-  // Ưu tiên danh mục cùng loại trước
+  const text = chuanHoaVanBan(description);
+  const danhMucList = await layDanhMuc();
+
   const cuungLoai = danhMucList.filter(c => c.type === type || c.type === 'both');
   const khacLoai  = danhMucList.filter(c => c.type !== type && c.type !== 'both');
 
@@ -47,13 +56,20 @@ export function classify(description: string, type: 'income' | 'expense'): strin
 /**
  * Lấy icon của một danh mục theo tên.
  */
-export function layIconDanhMuc(tenDanhMuc: string): string {
-  const row = db.prepare('SELECT icon FROM categories WHERE name = ?').get(tenDanhMuc) as
-    { icon: string } | undefined;
-  return row?.icon ?? '❓';
+export async function layIconDanhMuc(tenDanhMuc: string): Promise<string> {
+  if (/Ăn uống|Thực phẩm/i.test(tenDanhMuc)) return '🍜';
+  if (/Xe cộ|Di chuyển|Xăng/i.test(tenDanhMuc)) return '🛵';
+  if (/Sức khỏe|Y tế/i.test(tenDanhMuc)) return '💊';
+  if (/Nhà/i.test(tenDanhMuc)) return '🏠';
+  if (/Mua sắm|Giải trí/i.test(tenDanhMuc)) return '🛍️';
+  if (/Giáo dục|Học/i.test(tenDanhMuc)) return '📚';
+  if (/Lương/i.test(tenDanhMuc)) return '💵';
+  if (/Thu nhập/i.test(tenDanhMuc)) return '💰';
+  if (/Tiết kiệm|Đầu tư/i.test(tenDanhMuc)) return '📈';
+  const row = await db.prepare('SELECT icon FROM categories WHERE name = ?').get<{ icon: string }>(tenDanhMuc);
+  return row?.icon ?? '🏷️';
 }
 
-// Chuẩn hóa văn bản: chữ thường, bỏ dấu câu thừa
 function chuanHoaVanBan(text: string): string {
   return text
     .toLowerCase()

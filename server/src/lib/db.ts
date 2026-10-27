@@ -1,129 +1,339 @@
 import initSqlJs, { Database as SqlJsDatabase } from 'sql.js';
+import { Pool } from 'pg';
 import path from 'path';
 import fs from 'fs';
 
-// ── Đường dẫn lưu file database ───────────────────────────────────────────
-const dataDir = path.join(__dirname, '../../data');
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+// ── Định nghĩa Interface chung cho cả SQLite và PostgreSQL ───────────────
+export interface IDatabase {
+  isPostgres: boolean;
+  all<T = any>(sql: string, ...params: unknown[]): Promise<T[]>;
+  get<T = any>(sql: string, ...params: unknown[]): Promise<T | undefined>;
+  run(sql: string, ...params: unknown[]): Promise<{ lastInsertRowid: number; changes: number }>;
+  exec(sql: string): Promise<void>;
+  prepare(sql: string): {
+    all<T = any>(...params: unknown[]): Promise<T[]>;
+    get<T = any>(...params: unknown[]): Promise<T | undefined>;
+    run(...params: unknown[]): Promise<{ lastInsertRowid: number; changes: number }>;
+  };
 }
-const DB_PATH = path.join(dataDir, 'finance.db');
 
-// ── Wrapper tương thích với API better-sqlite3 ────────────────────────────
-// Mục đích: giữ nguyên code routes, chỉ thay đổi phần lõi database
-export class DB {
-  constructor(private sqlDb: SqlJsDatabase) {}
+// ── SQLite Engine (dùng khi chạy cục bộ trên máy) ─────────────────────────
+class SqliteDatabase implements IDatabase {
+  isPostgres = false;
+  constructor(private sqlDb: SqlJsDatabase, private dbPath: string) {}
 
-  /**
-   * Chuẩn bị một câu lệnh SQL có thể tái sử dụng.
-   * Trả về object có 3 phương thức: all(), get(), run()
-   */
-  prepare(sql: string) {
-    const sqlDb  = this.sqlDb;
-    const saveDB = () => this.save();
-
-    return {
-      // Lấy TẤT CẢ kết quả → mảng object
-      all(...args: unknown[]): any[] {
-        const params = lamPhangThamSo(args);
-        const stmt   = sqlDb.prepare(sql);
-        if (params.length) stmt.bind(params as any[]);
-        const rows: any[] = [];
-        while (stmt.step()) rows.push(chuanHoaHang(stmt.getAsObject()));
-        stmt.free();
-        return rows;
-      },
-
-      // Lấy KẾT QUẢ ĐẦU TIÊN → object hoặc undefined
-      get(...args: unknown[]): any | undefined {
-        const params = lamPhangThamSo(args);
-        const stmt   = sqlDb.prepare(sql);
-        if (params.length) stmt.bind(params as any[]);
-        let hang: any = undefined;
-        if (stmt.step()) hang = chuanHoaHang(stmt.getAsObject());
-        stmt.free();
-        return hang;
-      },
-
-      // Thực thi lệnh thay đổi dữ liệu (INSERT / UPDATE / DELETE)
-      run(...args: unknown[]): { lastInsertRowid: number; changes: number } {
-        const params = lamPhangThamSo(args);
-        const stmt   = sqlDb.prepare(sql);
-        if (params.length) stmt.bind(params as any[]);
-        stmt.step();
-        stmt.free();
-
-        // Lấy ID vừa insert và số hàng bị thay đổi
-        const lastId  = (sqlDb.exec('SELECT last_insert_rowid()')[0]?.values?.[0]?.[0] ?? 0) as number;
-        const changes = (sqlDb.exec('SELECT changes()')[0]?.values?.[0]?.[0] ?? 0) as number;
-
-        // Lưu vào file sau mỗi thao tác ghi
-        saveDB();
-        return { lastInsertRowid: lastId, changes };
-      }
-    };
+  private flatten(args: unknown[]): unknown[] {
+    const res: unknown[] = [];
+    for (const a of args) {
+      if (Array.isArray(a)) res.push(...a);
+      else res.push(a);
+    }
+    return res;
   }
 
-  // Thực thi nhiều câu SQL một lúc (dùng cho CREATE TABLE, v.v.)
-  exec(sql: string): void {
-    this.sqlDb.exec(sql);
+  private normalizeRow(row: Record<string, any>): any {
+    const res: Record<string, any> = {};
+    for (const [k, v] of Object.entries(row)) {
+      if (v instanceof Uint8Array) res[k] = Buffer.from(v).toString('utf8');
+      else res[k] = v;
+    }
+    return res;
   }
 
-  // Cài đặt PRAGMA (bỏ qua nếu không hỗ trợ)
-  pragma(sql: string): void {
-    try { this.sqlDb.run(`PRAGMA ${sql}`); } catch { /* bỏ qua */ }
-  }
-
-  // Lưu toàn bộ database vào file .db
   save(): void {
     const data = this.sqlDb.export();
-    fs.writeFileSync(DB_PATH, Buffer.from(data));
+    fs.writeFileSync(this.dbPath, Buffer.from(data));
+  }
+
+  async all<T = any>(sql: string, ...args: unknown[]): Promise<T[]> {
+    const params = this.flatten(args);
+    const stmt = this.sqlDb.prepare(sql);
+    if (params.length) stmt.bind(params as any[]);
+    const rows: any[] = [];
+    while (stmt.step()) rows.push(this.normalizeRow(stmt.getAsObject()));
+    stmt.free();
+    return rows as T[];
+  }
+
+  async get<T = any>(sql: string, ...args: unknown[]): Promise<T | undefined> {
+    const params = this.flatten(args);
+    const stmt = this.sqlDb.prepare(sql);
+    if (params.length) stmt.bind(params as any[]);
+    let row: any = undefined;
+    if (stmt.step()) row = this.normalizeRow(stmt.getAsObject());
+    stmt.free();
+    return row as T | undefined;
+  }
+
+  async run(sql: string, ...args: unknown[]): Promise<{ lastInsertRowid: number; changes: number }> {
+    const params = this.flatten(args);
+    const stmt = this.sqlDb.prepare(sql);
+    if (params.length) stmt.bind(params as any[]);
+    stmt.step();
+    stmt.free();
+    const lastId = (this.sqlDb.exec('SELECT last_insert_rowid()')[0]?.values?.[0]?.[0] ?? 0) as number;
+    const changes = (this.sqlDb.exec('SELECT changes()')[0]?.values?.[0]?.[0] ?? 0) as number;
+    this.save();
+    return { lastInsertRowid: lastId, changes };
+  }
+
+  async exec(sql: string): Promise<void> {
+    this.sqlDb.exec(sql);
+    this.save();
+  }
+
+  prepare(sql: string) {
+    return {
+      all: <T = any>(...params: unknown[]) => this.all<T>(sql, ...params),
+      get: <T = any>(...params: unknown[]) => this.get<T>(sql, ...params),
+      run: (...params: unknown[]) => this.run(sql, ...params)
+    };
   }
 }
 
-// Biến db được export, sẽ được gán sau khi initDB() hoàn thành
-export let db: DB;
+// ── PostgreSQL Engine (dùng khi deploy lên Render / Cloud) ────────────────
+class PostgresDatabase implements IDatabase {
+  isPostgres = true;
+  constructor(private pool: Pool) {}
 
-/**
- * Khởi tạo database (bất đồng bộ do sql.js cần load file WASM).
- * Phải gọi hàm này và await trước khi server nhận request.
- */
+  private flatten(args: unknown[]): unknown[] {
+    const res: unknown[] = [];
+    for (const a of args) {
+      if (Array.isArray(a)) res.push(...a);
+      else res.push(a);
+    }
+    return res;
+  }
+
+  // Chuyển dấu ? của SQLite thành $1, $2 của PostgreSQL
+  private convertSql(sql: string): string {
+    let i = 1;
+    let converted = sql.replace(/\?/g, () => `$${i++}`);
+    // Thay thế hàm lấy thời gian tương thích
+    converted = converted.replace(/datetime\('now','localtime'\)/gi, 'NOW()');
+    return converted;
+  }
+
+  async all<T = any>(sql: string, ...args: unknown[]): Promise<T[]> {
+    const params = this.flatten(args);
+    const cleanSql = this.convertSql(sql);
+    const res = await this.pool.query(cleanSql, params);
+    return res.rows as T[];
+  }
+
+  async get<T = any>(sql: string, ...args: unknown[]): Promise<T | undefined> {
+    const rows = await this.all<T>(sql, ...args);
+    return rows[0];
+  }
+
+  async run(sql: string, ...args: unknown[]): Promise<{ lastInsertRowid: number; changes: number }> {
+    const params = this.flatten(args);
+    let cleanSql = this.convertSql(sql);
+
+    // Nếu là lệnh INSERT và chưa có RETURNING id, tự thêm vào để lấy lastId (trừ bảng sessions không có cột id)
+    const isInsert = /^\s*INSERT\s+INTO/i.test(cleanSql);
+    let addedReturningId = false;
+    if (isInsert && !/RETURNING/i.test(cleanSql)) {
+      if (!/INSERT\s+INTO\s+sessions\b/i.test(cleanSql)) {
+        cleanSql = `${cleanSql.replace(/;\s*$/, '')} RETURNING id`;
+        addedReturningId = true;
+      }
+    }
+
+    const res = await this.pool.query(cleanSql, params);
+    const lastId = addedReturningId ? (res.rows?.[0]?.id ?? 0) : 0;
+    return { lastInsertRowid: Number(lastId), changes: res.rowCount ?? 0 };
+  }
+
+  async exec(sql: string): Promise<void> {
+    await this.pool.query(sql);
+  }
+
+  prepare(sql: string) {
+    return {
+      all: <T = any>(...params: unknown[]) => this.all<T>(sql, ...params),
+      get: <T = any>(...params: unknown[]) => this.get<T>(sql, ...params),
+      run: (...params: unknown[]) => this.run(sql, ...params)
+    };
+  }
+}
+
+// ── Khởi tạo Database ─────────────────────────────────────────────────────
+export let db: IDatabase;
+
 export async function initDB(): Promise<void> {
-  // Tìm file WASM của sql.js trong node_modules
-  const sqlJsDist = path.dirname(require.resolve('sql.js'));
-  const SQL = await initSqlJs({
-    locateFile: (file: string) => path.join(sqlJsDist, file)
-  });
+  const databaseUrl = process.env.DATABASE_URL || process.env.DATABASE_URL_UNPOOLED;
 
-  let sqlDb: SqlJsDatabase;
-  if (fs.existsSync(DB_PATH)) {
-    // Tải database đã tồn tại từ file
-    console.log('📂 Đang tải database từ file...');
-    const buf = fs.readFileSync(DB_PATH);
-    sqlDb = new SQL.Database(buf);
+  if (databaseUrl) {
+    const isNeon = databaseUrl.includes('neon.tech');
+    if (isNeon) {
+      console.log('⚡ Đang kết nối tới Neon Serverless Postgres Database...');
+    } else {
+      console.log('🐘 Đang kết nối tới PostgreSQL Database...');
+    }
+
+    const pool = new Pool({
+      connectionString: databaseUrl,
+      ssl: databaseUrl.includes('localhost') ? false : { rejectUnauthorized: false }
+    });
+
+    // Kiểm tra kết nối
+    await pool.query('SELECT 1');
+    console.log(`✅ Kết nối ${isNeon ? 'Neon Postgres' : 'PostgreSQL'} thành công! Dữ liệu sẽ được lưu vĩnh viễn trên đám mây.`);
+
+    db = new PostgresDatabase(pool);
+    await initPostgresTables();
   } else {
-    // Tạo database mới
-    console.log('🆕 Đang tạo database mới...');
-    sqlDb = new SQL.Database();
+    // 📁 Dùng SQLite (khi chạy local trên máy tính)
+    console.log('📁 Đang khởi tạo SQLite Database nội bộ...');
+    const dataDir = path.join(__dirname, '../../data');
+    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+    const dbPath = path.join(dataDir, 'finance.db');
+
+    const sqlJsDist = path.dirname(require.resolve('sql.js'));
+    const SQL = await initSqlJs({
+      locateFile: (file: string) => path.join(sqlJsDist, file)
+    });
+
+    let sqlDb: SqlJsDatabase;
+    if (fs.existsSync(dbPath)) {
+      const buf = fs.readFileSync(dbPath);
+      sqlDb = new SQL.Database(buf);
+    } else {
+      sqlDb = new SQL.Database();
+    }
+
+    db = new SqliteDatabase(sqlDb, dbPath);
+    await initSqliteTables();
   }
 
-  db = new DB(sqlDb);
-  db.pragma('foreign_keys = ON');
-
-  taoTables();
-  seedDanhMuc();
+  await seedDanhMuc();
 }
 
-// ── Tạo bảng dữ liệu ──────────────────────────────────────────────────────
+// ── Bảng cho PostgreSQL ───────────────────────────────────────────────────
+async function initPostgresTables(): Promise<void> {
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      username VARCHAR(100) UNIQUE NOT NULL,
+      password TEXT NOT NULL,
+      salt TEXT NOT NULL,
+      name TEXT DEFAULT '',
+      avatar TEXT DEFAULT '',
+      email TEXT DEFAULT '',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
 
-function taoTables(): void {
-  db.exec(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      token VARCHAR(128) PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS categories (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(100) UNIQUE NOT NULL,
+      type VARCHAR(20) DEFAULT 'both',
+      icon VARCHAR(20) DEFAULT '❓',
+      keywords TEXT DEFAULT '[]'
+    );
+
+    CREATE TABLE IF NOT EXISTS transactions (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      date VARCHAR(20) NOT NULL,
+      type VARCHAR(20) NOT NULL,
+      amount NUMERIC NOT NULL,
+      description TEXT NOT NULL,
+      category VARCHAR(100) NOT NULL,
+      note TEXT DEFAULT '',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS budgets (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      month VARCHAR(10) NOT NULL,
+      category VARCHAR(100) NOT NULL DEFAULT '',
+      amount NUMERIC NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS debts (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      type VARCHAR(20) NOT NULL,
+      person VARCHAR(150) NOT NULL,
+      amount NUMERIC NOT NULL,
+      paid_amount NUMERIC NOT NULL DEFAULT 0,
+      description TEXT DEFAULT '',
+      date VARCHAR(20) NOT NULL,
+      due_date VARCHAR(20) DEFAULT '',
+      status VARCHAR(20) NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS recurring_transactions (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      type VARCHAR(20) NOT NULL,
+      amount NUMERIC NOT NULL,
+      description TEXT NOT NULL,
+      category VARCHAR(100) NOT NULL,
+      note TEXT DEFAULT '',
+      day_of_month INTEGER NOT NULL DEFAULT 1,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      last_generated_month VARCHAR(10) DEFAULT '',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS credit_cards (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      card_name VARCHAR(150) NOT NULL,
+      bank_name VARCHAR(100) DEFAULT '',
+      balance NUMERIC NOT NULL,
+      paid_amount NUMERIC NOT NULL DEFAULT 0,
+      credit_limit NUMERIC DEFAULT 0,
+      due_date VARCHAR(20) NOT NULL,
+      statement_day INTEGER DEFAULT 0,
+      status VARCHAR(20) NOT NULL DEFAULT 'pending',
+      note TEXT DEFAULT '',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS credit_card_payments (
+      id SERIAL PRIMARY KEY,
+      card_id INTEGER NOT NULL REFERENCES credit_cards(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      amount NUMERIC NOT NULL,
+      payment_date VARCHAR(20) NOT NULL,
+      note TEXT DEFAULT '',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_transactions_user     ON transactions(user_id);
+    CREATE INDEX IF NOT EXISTS idx_transactions_date     ON transactions(date);
+    CREATE INDEX IF NOT EXISTS idx_transactions_type     ON transactions(type);
+    CREATE INDEX IF NOT EXISTS idx_transactions_category ON transactions(category);
+    CREATE INDEX IF NOT EXISTS idx_budgets_user_month    ON budgets(user_id, month);
+    CREATE INDEX IF NOT EXISTS idx_debts_user            ON debts(user_id);
+    CREATE INDEX IF NOT EXISTS idx_recurring_user        ON recurring_transactions(user_id);
+    CREATE INDEX IF NOT EXISTS idx_credit_cards_user     ON credit_cards(user_id);
+  `);
+}
+
+// ── Bảng cho SQLite ───────────────────────────────────────────────────────
+async function initSqliteTables(): Promise<void> {
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
       username    TEXT NOT NULL UNIQUE,
       password    TEXT NOT NULL,
       salt        TEXT NOT NULL,
       name        TEXT DEFAULT '',
+      avatar      TEXT DEFAULT '',
+      email       TEXT DEFAULT '',
       created_at  TEXT DEFAULT (datetime('now','localtime'))
     );
 
@@ -154,32 +364,110 @@ function taoTables(): void {
       created_at  TEXT DEFAULT (datetime('now','localtime')),
       FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS budgets (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id     INTEGER NOT NULL,
+      month       TEXT NOT NULL,
+      category    TEXT NOT NULL DEFAULT '',
+      amount      REAL NOT NULL,
+      created_at  TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS debts (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id     INTEGER NOT NULL,
+      type        TEXT NOT NULL,
+      person      TEXT NOT NULL,
+      amount      REAL NOT NULL,
+      paid_amount REAL NOT NULL DEFAULT 0,
+      description TEXT DEFAULT '',
+      date        TEXT NOT NULL,
+      due_date    TEXT DEFAULT '',
+      status      TEXT NOT NULL DEFAULT 'pending',
+      created_at  TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS recurring_transactions (
+      id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id              INTEGER NOT NULL,
+      type                 TEXT NOT NULL,
+      amount               REAL NOT NULL,
+      description          TEXT NOT NULL,
+      category             TEXT NOT NULL,
+      note                 TEXT DEFAULT '',
+      day_of_month         INTEGER NOT NULL DEFAULT 1,
+      is_active            INTEGER NOT NULL DEFAULT 1,
+      last_generated_month TEXT DEFAULT '',
+      created_at           TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS credit_cards (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id      INTEGER NOT NULL,
+      card_name    TEXT NOT NULL,
+      bank_name    TEXT DEFAULT '',
+      balance      REAL NOT NULL,
+      paid_amount  REAL NOT NULL DEFAULT 0,
+      credit_limit REAL DEFAULT 0,
+      due_date     TEXT NOT NULL,
+      statement_day INTEGER DEFAULT 0,
+      status       TEXT NOT NULL DEFAULT 'pending',
+      note         TEXT DEFAULT '',
+      created_at   TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS credit_card_payments (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      card_id      INTEGER NOT NULL,
+      user_id      INTEGER NOT NULL,
+      amount       REAL NOT NULL,
+      payment_date TEXT NOT NULL,
+      note         TEXT DEFAULT '',
+      created_at   TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY(card_id) REFERENCES credit_cards(id) ON DELETE CASCADE,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
   `);
 
-  // Đảm bảo cột user_id tồn tại cho database cũ đã tạo trước đó
   try {
-    db.exec('ALTER TABLE transactions ADD COLUMN user_id INTEGER DEFAULT 1;');
+    await db.exec('ALTER TABLE transactions ADD COLUMN user_id INTEGER DEFAULT 1;');
   } catch {
-    // Cột đã tồn tại
+    // Đã tồn tại
   }
 
-  db.exec(`
+  try {
+    await db.exec('ALTER TABLE users ADD COLUMN avatar TEXT DEFAULT "";');
+  } catch {
+    // Đã tồn tại
+  }
+
+  try {
+    await db.exec('ALTER TABLE users ADD COLUMN email TEXT DEFAULT "";');
+  } catch {
+    // Đã tồn tại
+  }
+
+  await db.exec(`
     CREATE INDEX IF NOT EXISTS idx_transactions_user     ON transactions(user_id);
     CREATE INDEX IF NOT EXISTS idx_transactions_date     ON transactions(date);
     CREATE INDEX IF NOT EXISTS idx_transactions_type     ON transactions(type);
     CREATE INDEX IF NOT EXISTS idx_transactions_category ON transactions(category);
+    CREATE INDEX IF NOT EXISTS idx_budgets_user_month    ON budgets(user_id, month);
+    CREATE INDEX IF NOT EXISTS idx_debts_user            ON debts(user_id);
+    CREATE INDEX IF NOT EXISTS idx_recurring_user        ON recurring_transactions(user_id);
+    CREATE INDEX IF NOT EXISTS idx_credit_cards_user     ON credit_cards(user_id);
   `);
 }
 
-// ── Tạo dữ liệu danh mục mặc định ────────────────────────────────────────
-
-function seedDanhMuc(): void {
-  const { c } = db.prepare('SELECT COUNT(*) as c FROM categories').get() as { c: number };
-  if (c > 0) return; // Đã có danh mục rồi, không cần tạo lại
-
-  const insert = db.prepare(
-    'INSERT OR IGNORE INTO categories (name, type, icon, keywords) VALUES (?, ?, ?, ?)'
-  );
+// ── Seed 10 danh mục mặc định ─────────────────────────────────────────────
+async function seedDanhMuc(): Promise<void> {
+  const row = await db.get<{ c: string | number }>('SELECT COUNT(*) as c FROM categories');
+  if (row && Number(row.c) > 0) return;
 
   const danhMuc = [
     {
@@ -293,35 +581,18 @@ function seedDanhMuc(): void {
   ];
 
   for (const dm of danhMuc) {
-    insert.run(dm.name, dm.type, dm.icon, JSON.stringify(dm.keywords));
-  }
-  // Lưu sau khi seed xong
-  db.save();
-  console.log('✅ Đã tạo 10 danh mục mặc định');
-}
-
-// ── Hàm hỗ trợ ────────────────────────────────────────────────────────────
-
-// Làm phẳng mảng tham số (xử lý trường hợp spread array hoặc giá trị lẻ)
-function lamPhangThamSo(args: unknown[]): unknown[] {
-  const result: unknown[] = [];
-  for (const arg of args) {
-    if (Array.isArray(arg)) result.push(...arg);
-    else result.push(arg);
-  }
-  return result;
-}
-
-// Chuẩn hóa một hàng kết quả từ sql.js
-function chuanHoaHang(row: Record<string, any>): any {
-  const ketQua: Record<string, any> = {};
-  for (const [key, val] of Object.entries(row)) {
-    // Chuyển Uint8Array (BLOB) thành string nếu cần
-    if (val instanceof Uint8Array) {
-      ketQua[key] = Buffer.from(val).toString('utf8');
+    if (db.isPostgres) {
+      await db.run(
+        'INSERT INTO categories (name, type, icon, keywords) VALUES (?, ?, ?, ?) ON CONFLICT (name) DO NOTHING',
+        dm.name, dm.type, dm.icon, JSON.stringify(dm.keywords)
+      );
     } else {
-      ketQua[key] = val;
+      await db.run(
+        'INSERT OR IGNORE INTO categories (name, type, icon, keywords) VALUES (?, ?, ?, ?)',
+        dm.name, dm.type, dm.icon, JSON.stringify(dm.keywords)
+      );
     }
   }
-  return ketQua;
+
+  console.log('✅ Đã tạo 10 danh mục mặc định');
 }

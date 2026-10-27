@@ -1,5 +1,12 @@
 node_modules/
 dist/
 data/*.db
+server/data/*.db
+*.db
 .DS_Store
 Thumbs.db
+.neon
+.env.local
+.env
+*.env
+server/.env

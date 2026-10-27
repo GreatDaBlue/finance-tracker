@@ -5,5 +5,9 @@
   "scripts": {
     "build": "cd client && npm install && npm run build && cd ../server && npm install && npm run build",
     "start": "node server/dist/index.js"
+  },
+  "dependencies": {
+    "@neon/config": "^1.9.4",
+    "@neon/env": "^1.6.5"
   }
 }

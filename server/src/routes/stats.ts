@@ -1,40 +1,145 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../lib/db';
-import { parseDateFromText, formatDate } from '../lib/dateParser';
+import { formatDate } from '../lib/dateParser';
 import { requireAuth, AuthenticatedRequest } from '../lib/auth';
 
 const router = Router();
 
 // ── GET /api/stats/summary ─────────────────────────────────────────────────
-// Returns total income, expense, balance for given filter
-router.get('/summary', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+router.get('/summary', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   const userId = req.user!.id;
   const { dateFrom, dateTo, category, type } = req.query as Record<string, string>;
   const { where, params } = buildWhere({ userId, dateFrom, dateTo, category, type });
 
-  const row = db.prepare(`
+  const row = await db.prepare(`
     SELECT
-      COALESCE(SUM(CASE WHEN type='income'  THEN amount ELSE 0 END), 0) AS totalIncome,
-      COALESCE(SUM(CASE WHEN type='expense' THEN amount ELSE 0 END), 0) AS totalExpense,
-      COUNT(*) AS count
+      COALESCE(SUM(CASE WHEN type='income'  THEN amount ELSE 0 END), 0) AS "totalIncome",
+      COALESCE(SUM(CASE WHEN type='expense' THEN amount ELSE 0 END), 0) AS "totalExpense",
+      COUNT(*) AS count,
+      COALESCE(SUM(CASE WHEN type='income'  THEN 1 ELSE 0 END), 0) AS "incomeCount",
+      COALESCE(SUM(CASE WHEN type='expense' THEN 1 ELSE 0 END), 0) AS "expenseCount"
     FROM transactions ${where}
-  `).get(...params) as { totalIncome: number; totalExpense: number; count: number };
+  `).get<{
+    totalIncome: string | number;
+    totalExpense: string | number;
+    count: string | number;
+    incomeCount: string | number;
+    expenseCount: string | number;
+  }>(...params);
+
+  const totalIncome = Number(row?.totalIncome || 0);
+  const totalExpense = Number(row?.totalExpense || 0);
+  const count = Number(row?.count || 0);
+  const incomeCount = Number(row?.incomeCount || 0);
+  const expenseCount = Number(row?.expenseCount || 0);
+  const balance = totalIncome - totalExpense;
+
+  // Tính so sánh kỳ này với kỳ trước & tỷ lệ tiết kiệm
+  let comparison = null;
+
+  if (dateFrom && dateTo) {
+    const dFrom = new Date(dateFrom);
+    const dTo = new Date(dateTo);
+    const diffTime = dTo.getTime() - dFrom.getTime();
+    if (diffTime >= 0) {
+      const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
+      const prevTo = new Date(dFrom);
+      prevTo.setDate(prevTo.getDate() - 1);
+      const prevFrom = new Date(prevTo);
+      prevFrom.setDate(prevFrom.getDate() - (diffDays - 1));
+
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const prevDateToStr = `${prevTo.getFullYear()}-${pad(prevTo.getMonth() + 1)}-${pad(prevTo.getDate())}`;
+      const prevDateFromStr = `${prevFrom.getFullYear()}-${pad(prevFrom.getMonth() + 1)}-${pad(prevFrom.getDate())}`;
+
+      const { where: prevWhere, params: prevParams } = buildWhere({
+        userId,
+        dateFrom: prevDateFromStr,
+        dateTo: prevDateToStr,
+        category,
+        type
+      });
+
+      const prevRow = await db.prepare(`
+        SELECT
+          COALESCE(SUM(CASE WHEN type='income'  THEN amount ELSE 0 END), 0) AS "totalIncome",
+          COALESCE(SUM(CASE WHEN type='expense' THEN amount ELSE 0 END), 0) AS "totalExpense"
+        FROM transactions ${prevWhere}
+      `).get<{ totalIncome: string | number; totalExpense: string | number }>(...prevParams);
+
+      const prevIncome = Number(prevRow?.totalIncome || 0);
+      const prevExpense = Number(prevRow?.totalExpense || 0);
+      const prevBalance = prevIncome - prevExpense;
+
+      const expenseChangePct = prevExpense > 0
+        ? Math.round(((totalExpense - prevExpense) / prevExpense) * 1000) / 10
+        : null;
+
+      const incomeChangePct = prevIncome > 0
+        ? Math.round(((totalIncome - prevIncome) / prevIncome) * 1000) / 10
+        : null;
+
+      const expenseToIncomeRatio = totalIncome > 0
+        ? Math.round((totalExpense / totalIncome) * 1000) / 10
+        : null;
+
+      const savingsRate = totalIncome > 0
+        ? Math.round((balance / totalIncome) * 1000) / 10
+        : 0;
+
+      comparison = {
+        prevIncome,
+        prevExpense,
+        prevBalance,
+        expenseChangePct,
+        incomeChangePct,
+        expenseToIncomeRatio,
+        savingsRate,
+        prevDateFrom: prevDateFromStr,
+        prevDateTo: prevDateToStr
+      };
+    }
+  }
+
+  if (!comparison) {
+    const savingsRate = totalIncome > 0
+      ? Math.round((balance / totalIncome) * 1000) / 10
+      : 0;
+    const expenseToIncomeRatio = totalIncome > 0
+      ? Math.round((totalExpense / totalIncome) * 1000) / 10
+      : null;
+
+    comparison = {
+      prevIncome: 0,
+      prevExpense: 0,
+      prevBalance: 0,
+      expenseChangePct: null,
+      incomeChangePct: null,
+      expenseToIncomeRatio,
+      savingsRate,
+      prevDateFrom: '',
+      prevDateTo: ''
+    };
+  }
 
   res.json({
-    totalIncome: row.totalIncome,
-    totalExpense: row.totalExpense,
-    balance: row.totalIncome - row.totalExpense,
-    count: row.count
+    totalIncome,
+    totalExpense,
+    balance,
+    count,
+    incomeCount,
+    expenseCount,
+    comparison
   });
 });
 
 // ── GET /api/stats/by-category ─────────────────────────────────────────────
-router.get('/by-category', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+router.get('/by-category', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   const userId = req.user!.id;
   const { dateFrom, dateTo, type } = req.query as Record<string, string>;
   const { where, params } = buildWhere({ userId, dateFrom, dateTo, type });
 
-  const rows = db.prepare(`
+  const rows = await db.prepare(`
     SELECT
       category,
       type,
@@ -43,51 +148,68 @@ router.get('/by-category', requireAuth, (req: AuthenticatedRequest, res: Respons
     FROM transactions ${where}
     GROUP BY category, type
     ORDER BY total DESC
-  `).all(...params) as Array<{ category: string; type: string; count: number; total: number }>;
+  `).all<{ category: string; type: string; count: string | number; total: string | number }>(...params);
 
-  const withIcons = rows.map(r => {
-    const cat = db.prepare('SELECT icon FROM categories WHERE name = ?').get(r.category) as
-      { icon: string } | undefined;
-    return { ...r, icon: cat?.icon ?? '❓' };
-  });
+  const allCategories = await db.prepare('SELECT name, icon FROM categories').all<{ name: string; icon: string }>();
+  const iconMap = new Map(allCategories.map(c => [c.name, c.icon]));
+
+  const withIcons = rows.map(r => ({
+    category: r.category,
+    type: r.type,
+    count: Number(r.count),
+    total: Number(r.total),
+    icon: iconMap.get(r.category) ?? '❓'
+  }));
 
   res.json(withIcons);
 });
 
 // ── GET /api/stats/by-date ─────────────────────────────────────────────────
-router.get('/by-date', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+router.get('/by-date', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   const userId = req.user!.id;
   const { dateFrom, dateTo, type, group = 'day' } = req.query as Record<string, string>;
   const { where, params } = buildWhere({ userId, dateFrom, dateTo, type });
 
-  let dateExpr: string;
+  // substr() chuẩn ANSI SQL hỗ trợ cả SQLite và PostgreSQL
+  let dateExpr = 'date';
   if (group === 'month') {
-    dateExpr = "strftime('%Y-%m', date)";
+    dateExpr = 'substr(date, 1, 7)';
+  } else if (group === 'quarter') {
+    dateExpr = `(CASE 
+      WHEN substr(date, 6, 2) IN ('01','02','03') THEN substr(date, 1, 4) || '-Q1'
+      WHEN substr(date, 6, 2) IN ('04','05','06') THEN substr(date, 1, 4) || '-Q2'
+      WHEN substr(date, 6, 2) IN ('07','08','09') THEN substr(date, 1, 4) || '-Q3'
+      ELSE substr(date, 1, 4) || '-Q4'
+    END)`;
   } else if (group === 'year') {
-    dateExpr = "strftime('%Y', date)";
-  } else {
-    dateExpr = 'date';
+    dateExpr = 'substr(date, 1, 4)';
   }
 
-  const rows = db.prepare(`
+  const rows = await db.prepare(`
     SELECT
       ${dateExpr} AS period,
       COALESCE(SUM(CASE WHEN type='income'  THEN amount ELSE 0 END), 0) AS income,
       COALESCE(SUM(CASE WHEN type='expense' THEN amount ELSE 0 END), 0) AS expense
     FROM transactions ${where}
-    GROUP BY period
+    GROUP BY ${dateExpr}
     ORDER BY period ASC
-  `).all(...params) as Array<{ period: string; income: number; expense: number }>;
+  `).all<{ period: string; income: string | number; expense: string | number }>(...params);
 
-  res.json(rows);
+  const formatted = rows.map(r => ({
+    period: r.period,
+    income: Number(r.income),
+    expense: Number(r.expense)
+  }));
+
+  res.json(formatted);
 });
 
 // ── POST /api/stats/query ──────────────────────────────────────────────────
-router.post('/query', (req: Request, res: Response) => {
+router.post('/query', async (req: Request, res: Response) => {
   const { query } = req.body as { query: string };
   if (!query) return res.status(400).json({ error: 'query is required' });
 
-  const result = parseNaturalQuery(query);
+  const result = await parseNaturalQuery(query);
   return res.json(result);
 });
 
@@ -137,54 +259,104 @@ interface QueryResult {
   category?: string;
   dateFrom?: string;
   dateTo?: string;
+  minAmount?: number;
+  maxAmount?: number;
   description: string;
 }
 
-/**
- * Parse Vietnamese natural-language queries into filter params.
- * Examples:
- *   "thực phẩm từ 1/1/2026 đến nay"
- *   "chi tiêu tháng 10"
- *   "thu nhập năm 2026"
- *   "ăn uống tuần này"
- */
-function parseNaturalQuery(query: string): QueryResult {
+function parseVnAmountToken(raw: string): number | null {
+  const str = raw.trim().toLowerCase().replace(/[,.](\d{3})/g, '$1').replace(/\s+/g, '');
+  const trMatch = str.match(/^(\d+(?:[.,]\d+)?)(?:tr|triệu|m)$/);
+  if (trMatch) return Math.round(parseFloat(trMatch[1].replace(',', '.')) * 1000000);
+
+  const cuMatch = str.match(/^(\d+(?:[.,]\d+)?)(?:củ)$/);
+  if (cuMatch) return Math.round(parseFloat(cuMatch[1].replace(',', '.')) * 1000000);
+
+  const litMatch = str.match(/^(\d+(?:[.,]\d+)?)(?:lít)$/);
+  if (litMatch) return Math.round(parseFloat(litMatch[1].replace(',', '.')) * 100000);
+
+  const kMatch = str.match(/^(\d+(?:[.,]\d+)?)(?:k|nghìn|ngàn)$/);
+  if (kMatch) return Math.round(parseFloat(kMatch[1].replace(',', '.')) * 1000);
+
+  const num = parseFloat(str.replace(/,/g, '.'));
+  if (!isNaN(num) && num > 0) return num;
+  return null;
+}
+
+async function parseNaturalQuery(query: string): Promise<QueryResult> {
   const text = query.toLowerCase().trim();
   const today = new Date();
   const result: QueryResult = { description: query };
 
-  // ── Detect type ──────────────────────────────────────────────────────────
+  // Parse khoảng số tiền hoặc so sánh số tiền:
+  // 1. Khoảng: 50k..200k, 50k-200k, từ 50k đến 200k
+  const rangeMatch = text.match(/(?:từ\s+)?(\d+[\w\.,]+)\s*(?:\.\.|\-|đến)\s*(\d+[\w\.,]+)/i);
+  if (rangeMatch) {
+    const a1 = parseVnAmountToken(rangeMatch[1]);
+    const a2 = parseVnAmountToken(rangeMatch[2]);
+    if (a1 !== null && a2 !== null) {
+      result.minAmount = Math.min(a1, a2);
+      result.maxAmount = Math.max(a1, a2);
+    }
+  }
+
+  // 2. Lớn hơn: > 100k, >= 100k, trên 100k, hơn 100k
+  if (result.minAmount === undefined) {
+    const gtMatch = text.match(/(?:>=|>|trên|hơn|lớn\s+hơn)\s*(\d+[\w\.,]+)/i);
+    if (gtMatch) {
+      const a = parseVnAmountToken(gtMatch[1]);
+      if (a !== null) result.minAmount = a;
+    }
+  }
+
+  // 3. Nhỏ hơn: < 200k, <= 200k, dưới 200k, bé hơn 200k
+  if (result.maxAmount === undefined) {
+    const ltMatch = text.match(/(?:<=|<|dưới|bé\s+hơn|nhỏ\s+hơn)\s*(\d+[\w\.,]+)/i);
+    if (ltMatch) {
+      const a = parseVnAmountToken(ltMatch[1]);
+      if (a !== null) result.maxAmount = a;
+    }
+  }
+
   if (/\b(chi tiêu|chi phí|tiêu xài|chi|expense)\b/.test(text)) {
     result.type = 'expense';
   } else if (/\b(thu nhập|thu|tiền vào|income)\b/.test(text)) {
     result.type = 'income';
   }
 
-  // ── Detect category by name / keyword ────────────────────────────────────
-  const categories = db.prepare('SELECT name, keywords FROM categories').all() as Array<{
-    name: string; keywords: string;
-  }>;
+  // Khớp chính xác các từ khóa thông dụng hàng ngày
+  if (/(?:^|[^\p{L}\p{N}])(cơm|phở|trà sữa|cafe|cà phê|bún|bánh|mì|cháo|lẩu|nướng)(?:[^\p{L}\p{N}]|$)/iu.test(text)) {
+    result.category = 'Thực phẩm & Ăn uống';
+  } else if (/(?:^|[^\p{L}\p{N}])(xăng|xe|gửi xe|đổ xăng|bãi xe|đậu xe|rửa xe|sửa xe|thay nhớt|grab|taxi|bus)(?:[^\p{L}\p{N}]|$)/iu.test(text)) {
+    result.category = 'Di chuyển & Xăng xe';
+  } else if (/(?:^|[^\p{L}\p{N}])(gym|thuốc|mua thuốc|khám|bệnh viện|bác sĩ|nha khoa|răng|fitness|yoga|spa)(?:[^\p{L}\p{N}]|$)/iu.test(text)) {
+    result.category = 'Y tế & Sức khỏe';
+  }
 
-  for (const cat of categories) {
-    const kws: string[] = JSON.parse(cat.keywords);
-    const catNameNorm = cat.name.toLowerCase();
+  if (!result.category) {
+    const categories = await db.prepare('SELECT name, keywords FROM categories').all<{
+      name: string;
+      keywords: string | string[];
+    }>();
 
-    // Check category name itself
-    if (text.includes(catNameNorm)) {
-      result.category = cat.name;
-      break;
-    }
-    // Check keywords
-    for (const kw of kws) {
-      if (text.includes(kw.toLowerCase())) {
+    for (const cat of categories) {
+      const kws: string[] = typeof cat.keywords === 'string' ? JSON.parse(cat.keywords) : (cat.keywords || []);
+      const catNameNorm = cat.name.toLowerCase();
+
+      if (text.includes(catNameNorm)) {
         result.category = cat.name;
         break;
       }
+      for (const kw of kws) {
+        if (text.includes(kw.toLowerCase())) {
+          result.category = cat.name;
+          break;
+        }
+      }
+      if (result.category) break;
     }
-    if (result.category) break;
   }
 
-  // Manual overrides for common query terms
   const categoryAliases: Record<string, string> = {
     'ăn uống': 'Thực phẩm & Ăn uống',
     'thực phẩm': 'Thực phẩm & Ăn uống',
@@ -219,12 +391,9 @@ function parseNaturalQuery(query: string): QueryResult {
     }
   }
 
-  // ── Detect date range ────────────────────────────────────────────────────
-
   const y = today.getFullYear();
-  const m = today.getMonth(); // 0-indexed
+  const m = today.getMonth();
 
-  // "từ DD/MM/YYYY đến DD/MM/YYYY"
   const fromToRx = /từ\s+(\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{4})?)\s+đến\s+(\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{4})?|nay|hiện tại|giờ)/i;
   const fromToMatch = text.match(fromToRx);
   if (fromToMatch) {
@@ -233,7 +402,6 @@ function parseNaturalQuery(query: string): QueryResult {
     result.dateTo = /^(nay|hiện tại|giờ)/.test(toStr) ? formatDate(today) : resolveShortDate(toStr, today);
   }
 
-  // "từ đầu năm YYYY đến nay" / "từ 1/1/YYYY đến nay"
   const fromYearRx = /từ\s+(?:đầu\s+năm|1\/1\/?)\s*(\d{4})\s+đến\s+(?:nay|hiện tại|giờ)/i;
   const fromYearMatch = text.match(fromYearRx);
   if (!result.dateFrom && fromYearMatch) {
@@ -241,15 +409,14 @@ function parseNaturalQuery(query: string): QueryResult {
     result.dateTo = formatDate(today);
   }
 
-  // "tháng X" or "tháng X/YYYY" or "tháng X năm YYYY"
   if (!result.dateFrom) {
-    const monthRx = /tháng\s+(\d{1,2})(?:\s*[\/\-]\s*|\s+năm\s+)(\d{4})?/i;
+    const monthRx = /tháng\s+(\d{1,2})(?:(?:\s*[\/\-]\s*|\s+năm\s+)(\d{4}))?/i;
     const monthMatch = text.match(monthRx);
     if (monthMatch) {
-      const mon = parseInt(monthMatch[1], 10) - 1; // 0-indexed
+      const mon = parseInt(monthMatch[1], 10) - 1;
       const yr = monthMatch[2] ? parseInt(monthMatch[2], 10) : y;
       result.dateFrom = formatDate(new Date(yr, mon, 1));
-      result.dateTo = formatDate(new Date(yr, mon + 1, 0)); // last day of month
+      result.dateTo = formatDate(new Date(yr, mon + 1, 0));
     } else if (/\btháng này\b/.test(text)) {
       result.dateFrom = formatDate(new Date(y, m, 1));
       result.dateTo = formatDate(today);
@@ -259,7 +426,6 @@ function parseNaturalQuery(query: string): QueryResult {
     }
   }
 
-  // "năm YYYY"
   if (!result.dateFrom) {
     const yearRx = /\bnăm\s+(\d{4})\b/i;
     const yearMatch = text.match(yearRx);
@@ -276,41 +442,13 @@ function parseNaturalQuery(query: string): QueryResult {
     }
   }
 
-  // "tuần này"
   if (!result.dateFrom && /\btuần này\b/.test(text)) {
-    const dayOfWeek = today.getDay(); // 0=Sun
+    const dayOfWeek = today.getDay();
     const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
     const monday = new Date(today);
     monday.setDate(today.getDate() + mondayOffset);
     result.dateFrom = formatDate(monday);
     result.dateTo = formatDate(today);
-  }
-
-  // "tuần trước"
-  if (!result.dateFrom && /\btuần trước\b/.test(text)) {
-    const dayOfWeek = today.getDay();
-    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-    const thisMonday = new Date(today);
-    thisMonday.setDate(today.getDate() + mondayOffset);
-    const lastMonday = new Date(thisMonday);
-    lastMonday.setDate(thisMonday.getDate() - 7);
-    const lastSunday = new Date(thisMonday);
-    lastSunday.setDate(thisMonday.getDate() - 1);
-    result.dateFrom = formatDate(lastMonday);
-    result.dateTo = formatDate(lastSunday);
-  }
-
-  // "hôm nay" / "hôm qua"
-  if (!result.dateFrom) {
-    if (/\bhôm nay\b/.test(text)) {
-      result.dateFrom = formatDate(today);
-      result.dateTo = formatDate(today);
-    } else if (/\bhôm qua\b/.test(text)) {
-      const yesterday = new Date(today);
-      yesterday.setDate(today.getDate() - 1);
-      result.dateFrom = formatDate(yesterday);
-      result.dateTo = formatDate(yesterday);
-    }
   }
 
   return result;
