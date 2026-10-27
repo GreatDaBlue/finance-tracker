@@ -38,7 +38,8 @@ import {
   FileSpreadsheet,
   FileJson,
   Key,
-  Heart
+  Heart,
+  Loader2
 } from 'lucide-react';
 
 interface Props {
@@ -72,11 +73,25 @@ export default function SideDrawer({
 
   // Sub-modals
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
+  const [selectedAvatarId, setSelectedAvatarId] = useState<string>(user?.avatar || '');
+  const [isSavingAvatar, setIsSavingAvatar] = useState(false);
+  const [avatarError, setAvatarError] = useState('');
+  const [avatarSuccess, setAvatarSuccess] = useState(false);
+
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [showAppInfoModal, setShowAppInfoModal] = useState(false);
+
+  // Đồng bộ selectedAvatarId khi mở popup avatar
+  useEffect(() => {
+    if (showAvatarPicker) {
+      setSelectedAvatarId(user?.avatar || '');
+      setAvatarError('');
+      setAvatarSuccess(false);
+    }
+  }, [showAvatarPicker, user?.avatar]);
 
   // Change password form
   const [oldPassword, setOldPassword] = useState('');
@@ -126,6 +141,7 @@ export default function SideDrawer({
   if (!isOpen) return null;
 
   const currentAvatar = getAnimalAvatar(user?.avatar);
+  const selectedAnimal = getAnimalAvatar(selectedAvatarId);
 
   // Lưu tên trực tiếp
   async function handleSaveName() {
@@ -143,15 +159,23 @@ export default function SideDrawer({
     }
   }
 
-  // Chọn avatar
-  async function handleSelectAvatar(avatarId: string) {
+  // Xác nhận lưu Avatar
+  async function handleConfirmAvatar() {
+    setIsSavingAvatar(true);
+    setAvatarError('');
     try {
-      const res = await api.updateProfile({ avatar: avatarId });
+      const res = await api.updateProfile({ avatar: selectedAvatarId });
       onUserUpdated(res.user);
-      setShowAvatarPicker(false);
-    } catch (err) {
+      setAvatarSuccess(true);
+      setTimeout(() => {
+        setShowAvatarPicker(false);
+        setAvatarSuccess(false);
+      }, 400);
+    } catch (err: unknown) {
       console.error(err);
-      alert('Không thể cập nhật avatar, vui lòng thử lại.');
+      setAvatarError(err instanceof Error ? err.message : 'Không thể cập nhật avatar, vui lòng thử lại.');
+    } finally {
+      setIsSavingAvatar(false);
     }
   }
 
@@ -519,7 +543,7 @@ export default function SideDrawer({
           onClick={() => setShowAvatarPicker(false)}
         >
           <div
-            className="bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-slate-100 dark:border-zinc-800 w-full max-w-2xl max-h-[85vh] flex flex-col p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150 cursor-default"
+            className="bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-slate-100 dark:border-zinc-800 w-full max-w-xl max-h-[90vh] flex flex-col p-4 sm:p-5 space-y-3 animate-in fade-in zoom-in-95 duration-150 cursor-default"
             onClick={e => e.stopPropagation()}
           >
             {/* Header modal */}
@@ -529,41 +553,92 @@ export default function SideDrawer({
                   <span>🐾</span> Chọn Avatar Đại Diện
                 </h3>
                 <p className="text-xs text-slate-400 dark:text-zinc-400 mt-0.5">
-                  Chọn hình tượng con vật vui nhộn mà bạn yêu thích
+                  Chọn con vật bạn yêu thích rồi nhấn Xác nhận đổi Avatar
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowAvatarPicker(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300 rounded-xl"
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+                title="Đóng"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Grid Avatars — Chỉ hiển thị hình ảnh trực quan, không cần phân loại hay tên */}
-            <div className="flex-1 overflow-y-auto grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2.5 sm:gap-3 p-1">
+            {/* Thanh xem trước Avatar đang chọn */}
+            <div className="flex items-center justify-between p-2.5 sm:p-3 rounded-2xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-200/80 dark:border-zinc-700/80">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center p-1 shrink-0 shadow-sm overflow-hidden ${
+                  selectedAnimal
+                    ? `bg-gradient-to-br ${selectedAnimal.bgGradient}`
+                    : 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white font-black text-base'
+                }`}>
+                  {selectedAnimal ? (
+                    <AnimalAvatarGraphic avatarId={selectedAnimal.id} className="w-full h-full object-contain filter drop-shadow-xs" />
+                  ) : (
+                    userName.charAt(0).toUpperCase() || 'U'
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs sm:text-sm font-bold text-slate-800 dark:text-zinc-100 flex items-center gap-1.5 truncate">
+                    <span>{selectedAnimal ? `${selectedAnimal.emoji} ${selectedAnimal.name}` : 'Chữ cái mặc định'}</span>
+                    {selectedAnimal && (
+                      <span className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold px-2 py-0.5 rounded-full bg-blue-100/70 dark:bg-blue-950/60 shrink-0">
+                        {selectedAnimal.englishName}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-zinc-400 truncate mt-0.5">
+                    {selectedAnimal ? selectedAnimal.description : 'Sử dụng chữ cái đầu tiên làm đại diện mặc định'}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedAvatarId('');
+                  setAvatarError('');
+                }}
+                className={`text-xs px-2.5 py-1.5 rounded-xl border transition-colors shrink-0 ml-2 ${
+                  selectedAvatarId === ''
+                    ? 'bg-blue-600 text-white border-blue-600 font-bold shadow-xs'
+                    : 'border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-700'
+                }`}
+                title="Bỏ avatar con vật, dùng chữ cái đầu tiên"
+              >
+                Chữ mặc định
+              </button>
+            </div>
+
+            {/* Grid Avatars — Bấm chọn để xem trước */}
+            <div className="flex-1 overflow-y-auto grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2.5 sm:gap-3 p-1 max-h-[46vh]">
               {ANIMAL_AVATARS.map(avatar => {
-                const isSelected = user?.avatar === avatar.id;
+                const isSelected = selectedAvatarId === avatar.id;
                 return (
                   <button
                     key={avatar.id}
                     type="button"
-                    onClick={() => handleSelectAvatar(avatar.id)}
+                    onClick={() => {
+                      setSelectedAvatarId(avatar.id);
+                      setAvatarError('');
+                    }}
                     className={`group relative p-1.5 rounded-2xl border flex items-center justify-center transition-all cursor-pointer aspect-square ${
                       isSelected
-                        ? 'bg-blue-50/90 dark:bg-blue-950/50 border-blue-500 ring-2 ring-blue-500/40 shadow-sm'
+                        ? 'bg-blue-50/90 dark:bg-blue-950/50 border-blue-500 ring-2 ring-blue-500/60 shadow-md scale-102'
                         : 'bg-slate-50/60 dark:bg-zinc-800/40 border-slate-200/80 dark:border-zinc-700/60 hover:bg-slate-100 dark:hover:bg-zinc-800 hover:border-blue-400'
                     }`}
+                    title={avatar.name}
                   >
                     {/* Hình avatar đáng yêu */}
                     <div className={`w-full h-full rounded-xl bg-gradient-to-br ${avatar.bgGradient} flex items-center justify-center p-1.5 shrink-0 shadow-sm ring-1 ring-black/5 dark:ring-white/10 overflow-hidden transition-transform group-hover:scale-105`}>
                       <AnimalAvatarGraphic avatarId={avatar.id} className="w-full h-full object-contain filter drop-shadow-xs" />
                     </div>
 
-                    {/* Checkmark đang dùng */}
+                    {/* Checkmark đang chọn */}
                     {isSelected && (
-                      <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-xs text-[10px] font-black border-2 border-white dark:border-zinc-900">
+                      <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-xs text-[11px] font-black border-2 border-white dark:border-zinc-900 animate-in zoom-in-50 duration-150">
                         ✓
                       </span>
                     )}
@@ -572,21 +647,43 @@ export default function SideDrawer({
               })}
             </div>
 
-            {/* Footer avatar picker */}
-            <div className="pt-2 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => handleSelectAvatar('')}
-                className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-zinc-300 underline"
-              >
-                Dùng chữ cái đầu tên mặc định
-              </button>
+            {avatarError && (
+              <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-rose-600 dark:text-rose-400 text-xs font-medium">
+                {avatarError}
+              </div>
+            )}
+
+            {/* Footer avatar picker với NÚT XÁC NHẬN */}
+            <div className="pt-2 border-t border-slate-100 dark:border-zinc-800 flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setShowAvatarPicker(false)}
-                className="px-4 py-2 bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 rounded-xl text-xs font-semibold"
+                className="px-4 py-2.5 bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 rounded-xl text-xs font-semibold transition-colors"
               >
-                Đóng
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmAvatar}
+                disabled={isSavingAvatar}
+                className="flex-1 py-2.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-500/25 flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
+              >
+                {isSavingAvatar ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Đang lưu Avatar...</span>
+                  </>
+                ) : avatarSuccess ? (
+                  <>
+                    <Check className="w-4 h-4 text-emerald-300" />
+                    <span>Đã lưu thành công!</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>Xác nhận đổi Avatar</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
