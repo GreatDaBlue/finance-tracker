@@ -117,11 +117,11 @@ export const ANIMAL_AVATARS: AnimalAvatar[] = [
     englishName: 'Husky',
     group: 'dog',
     groupTitle: 'Dog Squad (Chó)',
-    description: 'Mắt 2 màu dị sắc xanh và nâu, mặt ngáo ngơ siêu hài',
+    description: 'Mắt xanh băng tuyết, mặt nạ đen vệt lửa trán, tai tam giác sói tuyết',
     emoji: '🐺',
     badge: 'Chó Husky',
-    bgGradient: 'from-sky-400 to-blue-600',
-    accentColor: '#2563eb'
+    bgGradient: 'from-slate-700 via-zinc-800 to-neutral-900',
+    accentColor: '#38bdf8'
   },
   {
     id: 'dog_golden',
@@ -263,11 +263,11 @@ export const ANIMAL_AVATARS: AnimalAvatar[] = [
     englishName: 'Rabbit',
     group: 'other',
     groupTitle: 'Muông thú (Wild & Farm)',
-    description: 'Mặt tròn trắng tinh, tai thon dài hồng phấn, 2 răng cửa vuông nhỏ',
+    description: 'Tai dài mềm mại, mắt sapphire long lanh, má hồng phấn kawaii',
     emoji: '🐰',
     badge: 'Thỏ Trắng',
-    bgGradient: 'from-pink-200 to-purple-300',
-    accentColor: '#c084fc'
+    bgGradient: 'from-pink-300 via-rose-300 to-purple-300',
+    accentColor: '#f43f5e'
   },
   {
     id: 'animal_elephant',
@@ -275,11 +275,11 @@ export const ANIMAL_AVATARS: AnimalAvatar[] = [
     englishName: 'Elephant',
     group: 'other',
     groupTitle: 'Muông thú (Wild & Farm)',
-    description: 'Xám xanh pastel, tai quạt ửng hồng phấn, vòi ngắn vểnh may mắn',
+    description: 'Tai quạt lớn mềm mại, ngà trắng nhỏ xinh, vòi vểnh phun tim tài lộc',
     emoji: '🐘',
     badge: 'Voi Con',
-    bgGradient: 'from-slate-400 to-blue-500',
-    accentColor: '#475569'
+    bgGradient: 'from-sky-500 via-blue-600 to-indigo-700',
+    accentColor: '#0284c7'
   },
   {
     id: 'animal_horse',

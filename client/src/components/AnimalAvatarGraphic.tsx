@@ -354,45 +354,52 @@ export default function AnimalAvatarGraphic({ avatarId, className = 'w-full h-fu
         </svg>
       );
 
-    // 9. Chó Husky: Mặt nạ sói ngọn lửa, MẮT 2 MÀU (Xanh tuyết & Nâu), biểu cảm ngáo ngơ hài hước vô đối
+    // 9. Chó Husky: Chuẩn Siberian Husky với mặt nạ xám đen, ngọn lửa trán, mắt xanh băng tuyết & đốm lông mày trắng
     case 'dog_husky':
       return (
         <svg viewBox="0 0 100 100" className={className} style={style} fill="none" xmlns="http://www.w3.org/2000/svg">
-          {/* Tai nhọn dựng thẳng màu xám đen */}
-          <polygon points="18,10 38,36 12,38" fill="#334155" stroke="#0f172a" strokeWidth="2.5" strokeLinejoin="round" />
-          <polygon points="20,16 34,34 16,36" fill="#fca5a5" />
-          <polygon points="82,10 88,38 62,36" fill="#334155" stroke="#0f172a" strokeWidth="2.5" strokeLinejoin="round" />
-          <polygon points="80,16 84,36 66,34" fill="#fca5a5" />
+          {/* ĐÔI TAI SÓI HUSKY TAM GIÁC DỰNG ĐỨNG, VIỀN XÁM ĐEN */}
+          <polygon points="17,12 38,36 12,38" fill="#1e293b" stroke="#090d16" strokeWidth="2.5" strokeLinejoin="round" />
+          <polygon points="20,17 34,34 16,35" fill="#fca5a5" opacity="0.9" />
+          <polygon points="83,12 88,38 62,36" fill="#1e293b" stroke="#090d16" strokeWidth="2.5" strokeLinejoin="round" />
+          <polygon points="80,17 84,35 66,34" fill="#fca5a5" opacity="0.9" />
+          <path d="M22 28 Q26 34 30 32" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" />
+          <path d="M78 28 Q74 34 70 32" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" />
 
-          {/* Đầu sói xám đen */}
-          <ellipse cx="50" cy="54" rx="40" ry="36" fill="#475569" stroke="#0f172a" strokeWidth="3" />
+          {/* KHỐI ĐẦU HUSKY: MÀU XÁM ĐEN SÓI TUYẾT */}
+          <ellipse cx="50" cy="54" rx="40" ry="36" fill="#334155" stroke="#090d16" strokeWidth="2.8" />
 
-          {/* MẶT NẠ SÓI TRẮNG VỚI NGỌN LỬA TRÁN ĐẶC TRƯNG HUSKY */}
-          <path d="M50 22 C53 34 58 40 68 46 C78 52 82 64 80 76 C78 86 64 88 50 88 C36 88 22 86 20 76 C18 64 22 52 32 46 C42 40 47 34 50 22 Z" fill="#ffffff" />
-          {/* Hai vệt vằn ngọn lửa xám trán */}
-          <path d="M44 32 L40 44 L48 40" stroke="#334155" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="M56 32 L60 44 L52 40" stroke="#334155" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          {/* VỆT LÔNG TRẮNG MẶT NẠ ĐẶC TRƯNG HUSKY (MẶT KÍNH & VỆT LỬA TRÁN 3 CHẠC) */}
+          <path d="M18 56 C16 74 30 88 50 88 C70 88 84 74 82 56 C80 46 72 44 64 48 C56 52 54 44 52 28 C51 24 49 24 48 28 C46 44 44 52 36 48 C28 44 20 46 18 56 Z" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1.5" />
 
-          {/* ĐÔI MẮT 2 MÀU (ODD-EYES) HUYỀN THOẠI: 1 XANH BĂNG TUYẾT, 1 NÂU */}
-          {/* Mắt trái: Xanh băng tuyết rực rỡ */}
-          <circle cx="34" cy="52" r="8.5" fill="#38bdf8" stroke="#0284c7" strokeWidth="2" />
-          <circle cx="34" cy="52" r="5" fill="#0c4a6e" />
-          <circle cx="32" cy="49" r="2.5" fill="#ffffff" />
-          {/* Mắt phải: Nâu hổ phách ấm áp */}
-          <circle cx="66" cy="52" r="8.5" fill="#d97706" stroke="#92400e" strokeWidth="2" />
-          <circle cx="66" cy="52" r="5" fill="#451a03" />
-          <circle cx="64" cy="49" r="2.5" fill="#ffffff" />
+          {/* MẶT NẠ ĐEN QUANH MẮT HUSKY TÁCH BIỆT */}
+          <path d="M26 38 C30 32 40 34 44 44 C38 48 28 46 26 38 Z" fill="#1e293b" />
+          <path d="M74 38 C70 32 60 34 56 44 C62 48 72 46 74 38 Z" fill="#1e293b" />
+          {/* Đốm lông mày trắng (trang điểm tự nhiên của Husky) */}
+          <circle cx="34" cy="36" r="3" fill="#ffffff" />
+          <circle cx="66" cy="36" r="3" fill="#ffffff" />
 
-          {/* Lông mày 1 bên nhướng lên, 1 bên hạ xuống (mặt ngáo) */}
-          <path d="M28 42 L40 39" stroke="#1e293b" strokeWidth="3" strokeLinecap="round" />
-          <path d="M60 40 L72 44" stroke="#1e293b" strokeWidth="3" strokeLinecap="round" />
+          {/* ĐÔI MẮT XANH BĂNG TUYẾT (ARCTIC ICE BLUE) */}
+          <path d="M26 52 Q35 45 44 52 Q35 59 26 52 Z" fill="#ffffff" stroke="#090d16" strokeWidth="2.5" />
+          <circle cx="35" cy="52" r="6" fill="#38bdf8" />
+          <circle cx="35" cy="52" r="3.2" fill="#0369a1" />
+          <circle cx="35" cy="52" r="1.8" fill="#082f49" />
+          <circle cx="33.5" cy="50" r="1.5" fill="#ffffff" />
 
-          {/* Mũi đen sói */}
-          <polygon points="50,65 44,59 56,59" fill="#0f172a" />
+          <path d="M56 52 Q65 45 74 52 Q65 59 56 52 Z" fill="#ffffff" stroke="#090d16" strokeWidth="2.5" />
+          <circle cx="65" cy="52" r="6" fill="#38bdf8" />
+          <circle cx="65" cy="52" r="3.2" fill="#0369a1" />
+          <circle cx="65" cy="52" r="1.8" fill="#082f49" />
+          <circle cx="63.5" cy="50" r="1.5" fill="#ffffff" />
 
-          {/* Miệng ngáo thè lưỡi lệch sang một bên hài hước */}
-          <path d="M42 67 Q50 72 58 67" stroke="#0f172a" strokeWidth="2.5" strokeLinecap="round" fill="none" />
-          <path d="M52 69 C52 84 64 84 64 69 Z" fill="#f43f5e" stroke="#be123c" strokeWidth="1.5" transform="rotate(12 52 69)" />
+          {/* MŨI ĐEN HÌNH TRÁI TIM CỦA CHÓ TUYẾT */}
+          <path d="M44 65 C44 62 46 60 50 60 C54 60 56 62 56 65 C56 68 51 71 50 71 C49 71 44 68 44 65 Z" fill="#090d16" />
+          <ellipse cx="48" cy="63" rx="1.5" ry="0.8" fill="#64748b" />
+
+          {/* KHÓE MIỆNG CƯỜI NGÁO & LƯỠI HỒNG THÈ RA */}
+          <path d="M40 70 Q50 75 60 70" stroke="#090d16" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+          <path d="M47 73 C47 83 55 83 55 73 Z" fill="#fb7185" stroke="#e11d48" strokeWidth="1.5" />
+          <line x1="51" y1="73" x2="51" y2="79" stroke="#be123c" strokeWidth="1" />
         </svg>
       );
 
@@ -880,78 +887,92 @@ export default function AnimalAvatarGraphic({ avatarId, className = 'w-full h-fu
         </svg>
       );
 
-    // 24. Thỏ Trắng (Rabbit): Mặt tròn trắng tinh, tai dài dựng đứng lòng tai hồng pastel, mắt đen láy chấm tròn, mũi chữ Y hai răng cửa vuông nhỏ
+    // 24. Thỏ Trắng (Rabbit): Tai dài mềm mại duyên dáng, mắt sapphire long lanh, má hồng phấn ngọt ngào, miệng xinh :3
     case 'animal_rabbit':
       return (
         <svg viewBox="0 0 100 100" className={className} style={style} fill="none" xmlns="http://www.w3.org/2000/svg">
-          {/* Hai tai dài dựng đứng thon gọn, bên trong lòng tai phớt hồng pastel */}
-          <path d="M34 44 C26 30 26 8 36 6 C44 6 42 28 38 44 Z" fill="#ffffff" stroke="#94a3b8" strokeWidth="2.5" strokeLinejoin="round" />
-          <path d="M34 38 C28 26 28 12 36 10 C41 10 40 26 36 38 Z" fill="#fbcfe8" />
+          {/* ĐÔI TAI THỎ DÀI MỀM MẠI, BO TRÒN DỄ THƯƠNG */}
+          {/* Tai trái: Dựng thẳng duyên dáng */}
+          <path d="M30 46 C22 30 22 6 32 4 C42 2 44 24 38 46 Z" fill="#ffffff" stroke="#cbd5e1" strokeWidth="2.5" strokeLinejoin="round" />
+          <path d="M31 40 C26 28 26 10 32 8 C38 6 39 24 35 40 Z" fill="#fbcfe8" />
 
-          <path d="M62 44 C58 28 56 6 64 6 C74 8 74 30 66 44 Z" fill="#ffffff" stroke="#94a3b8" strokeWidth="2.5" strokeLinejoin="round" />
-          <path d="M64 38 C60 26 59 10 64 10 C72 12 72 26 66 38 Z" fill="#fbcfe8" />
+          {/* Tai phải: Hơi nghiêng nhẹ điệu đà */}
+          <path d="M60 46 C56 26 62 6 72 8 C80 10 76 32 68 46 Z" fill="#ffffff" stroke="#cbd5e1" strokeWidth="2.5" strokeLinejoin="round" />
+          <path d="M62 40 C59 26 64 12 70 13 C75 14 72 30 66 40 Z" fill="#fbcfe8" />
 
-          {/* Khuôn mặt tròn xoe màu trắng tinh khôi */}
-          <circle cx="50" cy="58" r="32" fill="#ffffff" stroke="#94a3b8" strokeWidth="2.5" />
+          {/* KHUÔN MẶT THỎ TRÒN TRĨNH, MÁ BẦU BĨNH KAWAII */}
+          <ellipse cx="50" cy="62" rx="36" ry="30" fill="#ffffff" stroke="#cbd5e1" strokeWidth="2.5" />
 
-          {/* Đôi mắt đen láy chấm tròn có điểm sáng nhỏ */}
-          <circle cx="36" cy="52" r="6" fill="#18181b" />
-          <circle cx="64" cy="52" r="6" fill="#18181b" />
-          <circle cx="34" cy="50" r="2" fill="#ffffff" />
-          <circle cx="62" cy="50" r="2" fill="#ffffff" />
+          {/* CHỎM LÔNG TƠ GIỮA TRÁN */}
+          <path d="M47 38 C49 33 51 33 53 38" stroke="#cbd5e1" strokeWidth="2" strokeLinecap="round" fill="none" />
 
-          {/* Hai má ửng hồng tròn */}
-          <circle cx="26" cy="62" r="6" fill="#fb7185" opacity="0.45" />
-          <circle cx="74" cy="62" r="6" fill="#fb7185" opacity="0.45" />
+          {/* ĐÔI MẮT LONG LANH TO TRÒN ÁNH ĐEN SAPPHIRE & 2 ĐIỂM SÁNG LẤP LÁNH */}
+          <circle cx="34" cy="58" r="6.5" fill="#1e1b4b" />
+          <circle cx="32" cy="55.5" r="2.5" fill="#ffffff" />
+          <circle cx="36" cy="60" r="1.2" fill="#ffffff" />
 
-          {/* Mũi tam giác hồng nhỏ & Đường xẻ môi chữ Y tối giản */}
-          <polygon points="50,60 46,56 54,56" fill="#f43f5e" />
-          <path d="M50 60 L50 65 M44 65 Q50 69 56 65" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" fill="none" />
+          <circle cx="66" cy="58" r="6.5" fill="#1e1b4b" />
+          <circle cx="64" cy="55.5" r="2.5" fill="#ffffff" />
+          <circle cx="68" cy="60" r="1.2" fill="#ffffff" />
 
-          {/* Hai chiếc răng cửa vuông nhỏ chìa ra cực kỳ đáng yêu */}
-          <rect x="46" y="66" width="3.5" height="4.5" rx="1" fill="#ffffff" stroke="#94a3b8" strokeWidth="1.2" />
-          <rect x="50.5" y="66" width="3.5" height="4.5" rx="1" fill="#ffffff" stroke="#94a3b8" strokeWidth="1.2" />
+          {/* LÔNG MI CONG NHẸ CỰC ĐÁNG YÊU */}
+          <path d="M28 53 L26 50 M32 51 L31 48" stroke="#1e1b4b" strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M72 53 L74 50 M68 51 L69 48" stroke="#1e1b4b" strokeWidth="1.8" strokeLinecap="round" />
 
-          {/* Ria mép mảnh nhẹ */}
-          <path d="M38 64 L22 62 M38 68 L24 70" stroke="#cbd5e1" strokeWidth="1.5" strokeLinecap="round" />
-          <path d="M62 64 L78 62 M62 68 L76 70" stroke="#cbd5e1" strokeWidth="1.5" strokeLinecap="round" />
+          {/* HAI ĐỐM MÁ HỒNG PHẤN TRÒN XOE NGỌT NGÀO */}
+          <circle cx="23" cy="67" r="7" fill="#fb7185" opacity="0.45" />
+          <circle cx="77" cy="67" r="7" fill="#fb7185" opacity="0.45" />
+
+          {/* MŨI HỒNG HÌNH TIM NHỎ & NỤ CƯỜI CHỮ :3 SIÊU XINH */}
+          <path d="M47 64 C47 62 48.5 61 50 62.5 C51.5 61 53 62 53 64 C53 66 50.5 67.5 50 67.5 C49.5 67.5 47 66 47 64 Z" fill="#f43f5e" />
+          <path d="M44 68 Q50 72 50 68 Q50 72 56 68" stroke="#64748b" strokeWidth="2" strokeLinecap="round" fill="none" />
+
+          {/* RIA MÉP MẢNH MAI */}
+          <line x1="22" y1="64" x2="12" y2="62" stroke="#cbd5e1" strokeWidth="1.5" strokeLinecap="round" />
+          <line x1="22" y1="68" x2="14" y2="70" stroke="#cbd5e1" strokeWidth="1.5" strokeLinecap="round" />
+          <line x1="78" y1="64" x2="88" y2="62" stroke="#cbd5e1" strokeWidth="1.5" strokeLinecap="round" />
+          <line x1="78" y1="68" x2="86" y2="70" stroke="#cbd5e1" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
       );
 
-    // 25. Voi Con (Elephant): Đầu tròn xám xanh pastel, 2 tai to quạt viền mỏng trong tai ửng hồng phấn, vòi ngắn vểnh lên may mắn, nụ cười má hồng tươi
+    // 25. Voi May Mắn (Elephant): Đôi tai to quạt mềm mại ôm hai bên, ngà trắng nhỏ xinh, vòi cong vểnh phun tim tài lộc
     case 'animal_elephant':
       return (
         <svg viewBox="0 0 100 100" className={className} style={style} fill="none" xmlns="http://www.w3.org/2000/svg">
-          {/* Hai tai to hình quạt xòe rộng sang hai bên viền nét mỏng */}
-          <ellipse cx="18" cy="46" rx="14" ry="20" fill="#94a3b8" stroke="#475569" strokeWidth="2" />
-          <ellipse cx="19" cy="46" rx="9" ry="14" fill="#fbcfe8" />
+          {/* ĐÔI TAI TO KHỔNG LỒ QUẠT MỀM MẠI ÔM HAI BÊN ĐẦU */}
+          <path d="M32 30 C10 24 2 46 8 68 C14 80 28 78 32 64 Z" fill="#94a3b8" stroke="#475569" strokeWidth="2.5" strokeLinejoin="round" />
+          <path d="M28 36 C14 32 8 48 12 64 C16 72 26 70 28 60 Z" fill="#fbcfe8" opacity="0.85" />
 
-          <ellipse cx="82" cy="46" rx="14" ry="20" fill="#94a3b8" stroke="#475569" strokeWidth="2" />
-          <ellipse cx="81" cy="46" rx="9" ry="14" fill="#fbcfe8" />
+          <path d="M68 30 C90 24 98 46 92 68 C86 80 72 78 68 64 Z" fill="#94a3b8" stroke="#475569" strokeWidth="2.5" strokeLinejoin="round" />
+          <path d="M72 36 C86 32 92 48 88 64 C84 72 74 70 72 60 Z" fill="#fbcfe8" opacity="0.85" />
 
-          {/* Đầu tròn màu xám xanh pastel (baby elephant) */}
-          <circle cx="50" cy="50" r="32" fill="#cbd5e1" stroke="#475569" strokeWidth="2.5" />
+          {/* ĐẦU VOI CON TRÒN TRĨNH ĐÁNG YÊU MÀU XANH XÁM PASTEL */}
+          <circle cx="50" cy="50" r="30" fill="#cbd5e1" stroke="#475569" strokeWidth="2.5" />
 
-          {/* Lọn tóc chỏm trên đỉnh đầu */}
-          <path d="M48 18 C50 14 52 14 54 18" stroke="#475569" strokeWidth="2" strokeLinecap="round" fill="none" />
+          {/* CHỎM TÓC TINH NGHỊCH TRÊN ĐỈNH ĐẦU */}
+          <path d="M46 22 C48 16 50 16 52 22 M50 16 C53 14 55 18 54 22" stroke="#475569" strokeWidth="2" strokeLinecap="round" fill="none" />
 
-          {/* Đôi mắt chấm tròn đen thân thiện */}
-          <circle cx="37" cy="44" r="5" fill="#0f172a" />
-          <circle cx="63" cy="44" r="5" fill="#0f172a" />
-          <circle cx="35" cy="42" r="1.8" fill="#ffffff" />
-          <circle cx="61" cy="42" r="1.8" fill="#ffffff" />
+          {/* ĐÔI MẮT ĐEN HẠT HUYỀN LẤP LÁNH HIỀN LÀNH */}
+          <circle cx="36" cy="45" r="5.5" fill="#0f172a" />
+          <circle cx="34" cy="43" r="2" fill="#ffffff" />
+          <circle cx="64" cy="45" r="5.5" fill="#0f172a" />
+          <circle cx="62" cy="43" r="2" fill="#ffffff" />
 
-          {/* Hai chấm má hồng tươi */}
-          <circle cx="28" cy="54" r="5.5" fill="#fb7185" opacity="0.5" />
-          <circle cx="72" cy="54" r="5.5" fill="#fb7185" opacity="0.5" />
+          {/* HAI MÁ HỒNG ĐÁNG YÊU */}
+          <circle cx="28" cy="55" r="6" fill="#fb7185" opacity="0.5" />
+          <circle cx="72" cy="55" r="6" fill="#fb7185" opacity="0.5" />
 
-          {/* Nụ cười tươi */}
-          <path d="M42 62 Q50 67 58 62" stroke="#475569" strokeWidth="2" strokeLinecap="round" fill="none" />
+          {/* ĐÔI NGÀ TRẮNG NHỎ CONG CONG CỰC DỄ THƯƠNG (IVORY TUSKS) */}
+          <path d="M38 56 C34 64 32 72 38 74 C40 74 41 70 42 62 Z" fill="#ffffff" stroke="#475569" strokeWidth="1.8" />
+          <path d="M62 56 C66 64 68 72 62 74 C60 74 59 70 58 62 Z" fill="#ffffff" stroke="#475569" strokeWidth="1.8" />
 
-          {/* Vòi voi ngắn, uốn cong nhẹ vểnh lên trên vui vẻ (tượng trưng cho may mắn) */}
-          <path d="M47 50 C47 62 49 68 56 68 C62 68 65 62 64 56 C63 54 60 54 59 56 C59 60 57 62 53 62 C49 62 51 54 53 50 Z" fill="#94a3b8" stroke="#475569" strokeWidth="2" strokeLinejoin="round" />
-          <line x1="48" y1="53" x2="52" y2="53" stroke="#475569" strokeWidth="1.5" strokeLinecap="round" />
-          <line x1="48" y1="57" x2="52" y2="57" stroke="#475569" strokeWidth="1.5" strokeLinecap="round" />
+          {/* VÒI VOI CONG VỂNH LÊN MANG LẠI MAY MẮN (TRUNK) */}
+          <path d="M45 48 C45 64 48 75 58 75 C66 75 70 66 66 58 C63 52 57 56 59 62 C60 64 63 64 64 62 C65 60 63 58 61 59 C58 60 61 66 65 65 C67 65 64 71 58 71 C50 71 49 62 49 48 Z" fill="#94a3b8" stroke="#475569" strokeWidth="2" strokeLinejoin="round" />
+          <path d="M46 54 Q49 56 51 54" stroke="#475569" strokeWidth="1.5" strokeLinecap="round" />
+          <path d="M47 59 Q50 61 52 59" stroke="#475569" strokeWidth="1.5" strokeLinecap="round" />
+
+          {/* TRÁI TIM MAY MẮN PHUN TỪ VÒI */}
+          <path d="M62 47 C62 44 64 42 66 44 C68 42 70 44 70 47 C70 50 66 53 66 53 C66 53 62 50 62 47 Z" fill="#38bdf8" />
         </svg>
       );
 
