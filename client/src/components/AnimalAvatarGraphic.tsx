@@ -935,44 +935,48 @@ export default function AnimalAvatarGraphic({ avatarId, className = 'w-full h-fu
         </svg>
       );
 
-    // 25. Voi May Mắn (Elephant): Đôi tai to quạt mềm mại ôm hai bên, ngà trắng nhỏ xinh, vòi cong vểnh phun tim tài lộc
+    // 25. Voi Con (Elephant): Bé Dumbo má tròn phúng phính, tai to quạt mềm, mắt boba long lanh, vòi cong phun giọt nước may mắn
     case 'animal_elephant':
       return (
         <svg viewBox="0 0 100 100" className={className} style={style} fill="none" xmlns="http://www.w3.org/2000/svg">
-          {/* ĐÔI TAI TO KHỔNG LỒ QUẠT MỀM MẠI ÔM HAI BÊN ĐẦU */}
-          <path d="M32 30 C10 24 2 46 8 68 C14 80 28 78 32 64 Z" fill="#94a3b8" stroke="#475569" strokeWidth="2.5" strokeLinejoin="round" />
-          <path d="M28 36 C14 32 8 48 12 64 C16 72 26 70 28 60 Z" fill="#fbcfe8" opacity="0.85" />
+          {/* ĐÔI TAI VOI TO TRÒN HÌNH QUẠT SIÊU ĐÁNG YÊU (DUMBO STYLE) */}
+          <ellipse cx="20" cy="48" rx="16" ry="22" fill="#94a3b8" stroke="#334155" strokeWidth="2.5" transform="rotate(-10 20 48)" />
+          <ellipse cx="21" cy="48" rx="11" ry="16" fill="#fbcfe8" transform="rotate(-10 21 48)" />
 
-          <path d="M68 30 C90 24 98 46 92 68 C86 80 72 78 68 64 Z" fill="#94a3b8" stroke="#475569" strokeWidth="2.5" strokeLinejoin="round" />
-          <path d="M72 36 C86 32 92 48 88 64 C84 72 74 70 72 60 Z" fill="#fbcfe8" opacity="0.85" />
+          <ellipse cx="80" cy="48" rx="16" ry="22" fill="#94a3b8" stroke="#334155" strokeWidth="2.5" transform="rotate(10 80 48)" />
+          <ellipse cx="79" cy="48" rx="11" ry="16" fill="#fbcfe8" transform="rotate(10 79 48)" />
 
-          {/* ĐẦU VOI CON TRÒN TRĨNH ĐÁNG YÊU MÀU XANH XÁM PASTEL */}
-          <circle cx="50" cy="50" r="30" fill="#cbd5e1" stroke="#475569" strokeWidth="2.5" />
+          {/* KHỐI ĐẦU TRÒN BẦU BĨNH MÀU XANH XÁM PASTEL */}
+          <circle cx="50" cy="52" r="32" fill="#cbd5e1" stroke="#334155" strokeWidth="2.5" />
 
-          {/* CHỎM TÓC TINH NGHỊCH TRÊN ĐỈNH ĐẦU */}
-          <path d="M46 22 C48 16 50 16 52 22 M50 16 C53 14 55 18 54 22" stroke="#475569" strokeWidth="2" strokeLinecap="round" fill="none" />
+          {/* CHỎM TÓC MỀM TRÊN ĐỈNH ĐẦU */}
+          <path d="M47 22 C48 16 50 16 51 22 M50 16 C52 13 54 17 53 22" stroke="#334155" strokeWidth="2" strokeLinecap="round" fill="none" />
 
-          {/* ĐÔI MẮT ĐEN HẠT HUYỀN LẤP LÁNH HIỀN LÀNH */}
-          <circle cx="36" cy="45" r="5.5" fill="#0f172a" />
-          <circle cx="34" cy="43" r="2" fill="#ffffff" />
-          <circle cx="64" cy="45" r="5.5" fill="#0f172a" />
-          <circle cx="62" cy="43" r="2" fill="#ffffff" />
+          {/* ĐÔI MẮT LONG LANH TO TRÒN ĐEN LÁY (KAWAII BOBA EYES) */}
+          <circle cx="35" cy="46" r="6" fill="#0f172a" />
+          <circle cx="33" cy="43.5" r="2.2" fill="#ffffff" />
+          <circle cx="36.5" cy="47.5" r="1.2" fill="#ffffff" />
 
-          {/* HAI MÁ HỒNG ĐÁNG YÊU */}
-          <circle cx="28" cy="55" r="6" fill="#fb7185" opacity="0.5" />
-          <circle cx="72" cy="55" r="6" fill="#fb7185" opacity="0.5" />
+          <circle cx="65" cy="46" r="6" fill="#0f172a" />
+          <circle cx="63" cy="43.5" r="2.2" fill="#ffffff" />
+          <circle cx="66.5" cy="47.5" r="1.2" fill="#ffffff" />
 
-          {/* ĐÔI NGÀ TRẮNG NHỎ CONG CONG CỰC DỄ THƯƠNG (IVORY TUSKS) */}
-          <path d="M38 56 C34 64 32 72 38 74 C40 74 41 70 42 62 Z" fill="#ffffff" stroke="#475569" strokeWidth="1.8" />
-          <path d="M62 56 C66 64 68 72 62 74 C60 74 59 70 58 62 Z" fill="#ffffff" stroke="#475569" strokeWidth="1.8" />
+          {/* HAI GÒ MÁ ỬNG HỒNG BẦU BĨNH */}
+          <circle cx="27" cy="56" r="6.5" fill="#fb7185" opacity="0.45" />
+          <circle cx="73" cy="56" r="6.5" fill="#fb7185" opacity="0.45" />
 
-          {/* VÒI VOI CONG VỂNH LÊN MANG LẠI MAY MẮN (TRUNK) */}
-          <path d="M45 48 C45 64 48 75 58 75 C66 75 70 66 66 58 C63 52 57 56 59 62 C60 64 63 64 64 62 C65 60 63 58 61 59 C58 60 61 66 65 65 C67 65 64 71 58 71 C50 71 49 62 49 48 Z" fill="#94a3b8" stroke="#475569" strokeWidth="2" strokeLinejoin="round" />
-          <path d="M46 54 Q49 56 51 54" stroke="#475569" strokeWidth="1.5" strokeLinecap="round" />
-          <path d="M47 59 Q50 61 52 59" stroke="#475569" strokeWidth="1.5" strokeLinecap="round" />
+          {/* KHÓE MIỆNG CƯỜI TƯƠI MỈM DƯỚI GỐC VÒI */}
+          <path d="M42 63 Q50 68 58 63" stroke="#334155" strokeWidth="2" strokeLinecap="round" fill="none" />
 
-          {/* TRÁI TIM MAY MẮN PHUN TỪ VÒI */}
-          <path d="M62 47 C62 44 64 42 66 44 C68 42 70 44 70 47 C70 50 66 53 66 53 C66 53 62 50 62 47 Z" fill="#38bdf8" />
+          {/* CHIẾC VÒI VOI THON MỀM, UỐN CONG VỂNH LÊN ĐÁNG YÊU */}
+          <path d="M46 50 C46 64 48 76 56 76 C63 76 67 69 64 61 C61 54 55 57 56 62 C57 65 60 65 61 63 C61.5 62 61 61 60 61 C59 61 58 63 60 64 C60 66 57 69 54 69 C49 69 49 60 49 50 Z" fill="#94a3b8" stroke="#334155" strokeWidth="2" strokeLinejoin="round" />
+          <line x1="47" y1="56" x2="51" y2="56" stroke="#475569" strokeWidth="1.5" strokeLinecap="round" />
+          <line x1="47.5" y1="62" x2="52" y2="62" stroke="#475569" strokeWidth="1.5" strokeLinecap="round" />
+
+          {/* GIỌT NƯỚC / HẠT NGỌC MAY MẮN PHUN RA TỪ ĐẦU VÒI */}
+          <circle cx="65" cy="48" r="2.5" fill="#38bdf8" />
+          <circle cx="71" cy="43" r="1.8" fill="#38bdf8" />
+          <circle cx="67" cy="40" r="1.2" fill="#38bdf8" />
         </svg>
       );
 
