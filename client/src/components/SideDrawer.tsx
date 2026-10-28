@@ -159,10 +159,18 @@ export default function SideDrawer({
     }
   }
 
-  // Xác nhận lưu Avatar
+  // Xác nhận lưu Avatar (Optimistic Update 0ms)
   async function handleConfirmAvatar() {
+    if (isSavingAvatar) return;
     setIsSavingAvatar(true);
     setAvatarError('');
+
+    const previousAvatar = user?.avatar;
+    // Cập nhật giao diện tức thì để người dùng thấy đổi ngay lập tức
+    if (user) {
+      onUserUpdated({ ...user, avatar: selectedAvatarId });
+    }
+
     try {
       const res = await api.updateProfile({ avatar: selectedAvatarId });
       onUserUpdated(res.user);
@@ -170,9 +178,13 @@ export default function SideDrawer({
       setTimeout(() => {
         setShowAvatarPicker(false);
         setAvatarSuccess(false);
-      }, 400);
+      }, 350);
     } catch (err: unknown) {
       console.error(err);
+      // Rollback lại avatar cũ nếu gặp lỗi
+      if (user && previousAvatar !== undefined) {
+        onUserUpdated({ ...user, avatar: previousAvatar });
+      }
       setAvatarError(err instanceof Error ? err.message : 'Không thể cập nhật avatar, vui lòng thử lại.');
     } finally {
       setIsSavingAvatar(false);
