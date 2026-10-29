@@ -39,7 +39,8 @@ import {
   FileJson,
   Key,
   Heart,
-  Loader2
+  Loader2,
+  Smartphone
 } from 'lucide-react';
 
 interface Props {
@@ -51,6 +52,7 @@ interface Props {
   theme: 'light' | 'dark';
   onToggleTheme: () => void;
   onOpenImport: () => void;
+  onOpenInstallGuide?: () => void;
 }
 
 export default function SideDrawer({
@@ -61,7 +63,8 @@ export default function SideDrawer({
   onLogout,
   theme,
   onToggleTheme,
-  onOpenImport
+  onOpenImport,
+  onOpenInstallGuide
 }: Props) {
   const userName = getUserDisplayName(user);
   const drawerRef = useRef<HTMLDivElement>(null);
@@ -432,6 +435,37 @@ export default function SideDrawer({
                   </h4>
                   <p className="text-[10px] sm:text-[11px] text-slate-400 dark:text-zinc-500 truncate">
                     Tăng cường bảo mật
+                  </p>
+                </div>
+              </div>
+              <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:translate-x-0.5 transition-transform shrink-0" />
+            </button>
+
+            {/* 4. Cài đặt App trên điện thoại (PWA) */}
+            <button
+              type="button"
+              onClick={() => {
+                if (onOpenInstallGuide) {
+                  onOpenInstallGuide();
+                }
+              }}
+              className="w-full flex items-center justify-between p-2 sm:p-2.5 rounded-xl text-left hover:bg-slate-50 dark:hover:bg-zinc-800/60 transition-colors group"
+            >
+              <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-1">
+                <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold shrink-0">
+                  <Smartphone className="w-3.5 h-3.5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <h4 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-zinc-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate">
+                      Cài đặt App điện thoại
+                    </h4>
+                    <span className="text-[9px] font-extrabold bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 px-1 py-0.2 rounded-sm shrink-0">
+                      PWA
+                    </span>
+                  </div>
+                  <p className="text-[10px] sm:text-[11px] text-slate-400 dark:text-zinc-500 truncate">
+                    Thêm vào màn hình chính
                   </p>
                 </div>
               </div>

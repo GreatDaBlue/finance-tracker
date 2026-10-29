@@ -18,6 +18,8 @@ import RecurringModal from '../components/RecurringModal';
 import ImportModal from '../components/ImportModal';
 import AuthModal from '../components/AuthModal';
 import SideDrawer from '../components/SideDrawer';
+import InstallGuideModal from '../components/InstallGuideModal';
+import InstallSmartBanner from '../components/InstallSmartBanner';
 import AnimalAvatarGraphic from '../components/AnimalAvatarGraphic';
 import { getAnimalAvatar } from '../lib/animalAvatars';
 import { exportToExcel, exportToCSV } from '../lib/exportUtils';
@@ -59,8 +61,20 @@ export default function HomePage() {
   const [activeTab, setActiveTab] = useState<'list' | 'dashboard' | 'budget' | 'debt'>('list');
   const [showImport, setShowImport] = useState(false);
   const [showRecurring, setShowRecurring] = useState(false);
+  const [showInstallGuide, setShowInstallGuide] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
+  // Lắng nghe sự kiện cài đặt PWA của trình duyệt (Android Chrome, Edge, Chromium)
+  useEffect(() => {
+    const handleBeforeInstall = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+  }, []);
 
   // Chế độ Tối (Dark Mode)
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -184,6 +198,12 @@ export default function HomePage() {
           }}
         />
       )}
+
+      {/* Thanh Smart Banner hướng dẫn cài App PWA trên điện thoại / trình duyệt */}
+      <InstallSmartBanner
+        onOpenGuide={() => setShowInstallGuide(true)}
+        deferredPrompt={deferredPrompt}
+      />
 
       {/* Header */}
       <header className="bg-white dark:bg-zinc-900/90 border-b border-slate-100 dark:border-zinc-800 sticky top-0 z-40 w-full backdrop-blur-md transition-colors">
@@ -366,6 +386,18 @@ export default function HomePage() {
           setIsDrawerOpen(false);
           setShowImport(true);
         }}
+        onOpenInstallGuide={() => {
+          setIsDrawerOpen(false);
+          setShowInstallGuide(true);
+        }}
+      />
+
+      {/* Modal Hướng dẫn cài đặt App (PWA) trên điện thoại */}
+      <InstallGuideModal
+        isOpen={showInstallGuide}
+        onClose={() => setShowInstallGuide(false)}
+        deferredPrompt={deferredPrompt}
+        onInstallSuccess={() => setDeferredPrompt(null)}
       />
 
       {/* Modal Import */}
