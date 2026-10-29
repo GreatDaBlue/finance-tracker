@@ -27,10 +27,17 @@ async function layDanhMuc(): Promise<Category[]> {
 export async function classify(description: string, type: 'income' | 'expense'): Promise<string> {
   const trimmed = description.trim();
 
-  // Nhận diện Quà tặng / Cho biếu:
+  // Nhận diện Quà tặng / Cho biếu & Tiền được cho:
   if (type === 'income') {
-    if (/^được\s+(?:(?:tiền\s+)?cho|tặng|lì xì|biếu)/iu.test(trimmed) ||
-        /^(?:được\s+)?[^\d,.;]+?\s+(?:cho|lì xì|tặng|biếu)/iu.test(trimmed)) {
+    if (
+      /^(?:được|nhận)\s+(?:(?:tiền\s+)?(?:thừa|thối|dư\s+)?(?:cho|tặng|lì xì|biếu|thưởng)|quà)/iu.test(trimmed) ||
+      /^(?:tiền\s+)?(?:thừa|thối|dư|bo|tip)\b/iu.test(trimmed) ||
+      /\bkhách\s+(?:bo|tip|cho|tặng)\b/iu.test(trimmed) ||
+      /(?:^(?:tiền(?:\s+(?:thừa|thối|dư))?\s+)?|(?:^được\s+))[^\d,.;]+?\s+(?:cho|lì xì|tặng|biếu|thưởng)/iu.test(trimmed)
+    ) {
+      if (/^(?:tiền\s+)?(?:bo|tip)\b/iu.test(trimmed) || /\bkhách\s+(?:bo|tip)\b/iu.test(trimmed)) {
+        return 'Thu nhập khác';
+      }
       return 'Được tặng & Cho';
     }
   } else {

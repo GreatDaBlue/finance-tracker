@@ -264,6 +264,15 @@ export default function TransactionForm({ onCreated, user }: Props) {
     setParsedItems(updated);
   }
 
+  function updateItemDate(index: number, newDate: string) {
+    const updated = [...parsedItems];
+    updated[index] = {
+      ...updated[index],
+      date: newDate
+    };
+    setParsedItems(updated);
+  }
+
   // ── Đổi loại Thu/Chi/Nợ thủ công trong Tùy chỉnh chi tiết ───────────────────
   function handleTypeChange(newType: 'expense' | 'income' | 'debt_lend' | 'debt_borrow') {
     setType(newType);
@@ -781,8 +790,15 @@ export default function TransactionForm({ onCreated, user }: Props) {
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0 text-slate-400 whitespace-nowrap">
-                      <span>📅 {item.date ? item.date.split('-').reverse().join('/') : 'Hôm nay'}</span>
+                    <div className="flex items-center gap-1.5 shrink-0 text-slate-500 whitespace-nowrap">
+                      <span className="text-slate-400">📅</span>
+                      <input
+                        type="date"
+                        value={item.date}
+                        onChange={e => updateItemDate(idx, e.target.value)}
+                        className="bg-white/80 hover:bg-white border border-slate-200/90 rounded-md px-1.5 py-0.5 font-medium text-slate-700 text-[11px] focus:outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer"
+                        title="Nhấn để đổi ngày của giao dịch này"
+                      />
                     </div>
                   </div>
                 </div>
@@ -791,8 +807,16 @@ export default function TransactionForm({ onCreated, user }: Props) {
           </div>
         )}
 
+        {/* Cảnh báo khi dán văn bản nhiều dòng nhưng chưa có số tiền nào */}
+        {smartText.includes('\n') && parsedItems.length === 0 && (
+          <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs flex items-center gap-2">
+            <span className="text-sm">ℹ️</span>
+            <span>Đoạn văn bản đã dán chưa chứa số tiền hợp lệ (ví dụ: 35k, 50.000đ, 2tr). Các dòng tiêu đề và ghi chú sẽ được bỏ qua tự động.</span>
+          </div>
+        )}
+
         {/* ══ TRƯỜNG HỢP 2: 1 GIAO DỊCH ĐƠN (HIỂN THỊ CHIPS NHƯ CŨ) ══ */}
-        {!isMultiple && smartText.trim() && (
+        {!isMultiple && smartText.trim() && (!smartText.includes('\n') || parsedItems.length > 0) && (
           <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
             {/* Nhận diện Loại */}
             <span className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-semibold border ${colorCls.badge}`}>

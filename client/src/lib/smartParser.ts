@@ -165,16 +165,22 @@ export function parseAmountInput(raw: string): number {
   return parseInt(digits, 10) || 0;
 }
 
+export interface ParsedDateResult {
+  date: string;
+  cleanText: string;
+  hasExplicitDate: boolean;
+}
+
 /**
- * Tách ngày tháng từ câu tiếng Việt (cho bulk import file .txt)
+ * Tách ngày tháng từ câu tiếng Việt (hỗ trợ ngày cụ thể, hôm qua, hôm nay, từ lóng / viết tắt)
  */
-export function parseDateFromVietnameseText(text: string, today: Date = new Date()): { date: string; cleanText: string } {
+export function parseDateFromVietnameseText(text: string, today: Date = new Date()): ParsedDateResult {
   let remaining = text;
   const pad = (n: number) => String(n).padStart(2, '0');
   const toISO = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
-  // dd/MM/YYYY hoặc dd-MM-YYYY
-  const fullDateRx = /\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\b/;
+  // 1. Ngày đầy đủ: dd/MM/YYYY hoặc dd-MM-YYYY (kèm từ tiền tố "vào / hôm / ngày" nếu có)
+  const fullDateRx = /(?:(?:vào|hôm|ngày)\s+)?\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\b/iu;
   const fullM = remaining.match(fullDateRx);
   if (fullM) {
     const day = parseInt(fullM[1], 10);
@@ -182,42 +188,145 @@ export function parseDateFromVietnameseText(text: string, today: Date = new Date
     const year = parseInt(fullM[3], 10);
     const d = new Date(year, month, day);
     if (!isNaN(d.getTime())) {
-      return { date: toISO(d), cleanText: remaining.replace(fullM[0], '').trim() };
+      const clean = remaining.replace(fullM[0], ' ').replace(/\s{2,}/g, ' ').trim();
+      return {
+        date: toISO(d),
+        cleanText: clean.replace(/^[\s,;:\-]+/, '').replace(/[\s,;:\-]+$/, '').trim(),
+        hasExplicitDate: true
+      };
     }
   }
 
-  // dd/MM hoặc dd-MM (năm nay)
-  const shortDateRx = /\b(\d{1,2})[\/\-](\d{1,2})\b/;
+  // 2. Ngày với chữ "tháng" hoặc "thg": "20 tháng 10", "20 thg 10", "hôm 20 tháng 10"
+  const thangDateRx = /(?:(?:vào|hôm|ngày)\s+)?\b(\d{1,2})\s*(?:tháng|thg)\s*(\d{1,2})(?:\s*(?:năm|\/|-)\s*(\d{4}))?\b/iu;
+  const thangM = remaining.match(thangDateRx);
+  if (thangM) {
+    const day = parseInt(thangM[1], 10);
+    const month = parseInt(thangM[2], 10) - 1;
+    let year = thangM[3] ? parseInt(thangM[3], 10) : today.getFullYear();
+    let d = new Date(year, month, day);
+    if (!thangM[3]) {
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      if (d > tomorrow) d = new Date(year - 1, month, day);
+    }
+    if (!isNaN(d.getTime())) {
+      const clean = remaining.replace(thangM[0], ' ').replace(/\s{2,}/g, ' ').trim();
+      return {
+        date: toISO(d),
+        cleanText: clean.replace(/^[\s,;:\-]+/, '').replace(/[\s,;:\-]+$/, '').trim(),
+        hasExplicitDate: true
+      };
+    }
+  }
+
+  // 3. Ngày ngắn: dd/MM hoặc dd-MM (năm nay): "hôm 20-10", "ngày 20-10", "20/10", "20-10"
+  const shortDateRx = /(?:(?:vào|hôm|ngày)\s+)?\b(\d{1,2})[\/\-](\d{1,2})\b/iu;
   const shortM = remaining.match(shortDateRx);
   if (shortM) {
     const day = parseInt(shortM[1], 10);
     const month = parseInt(shortM[2], 10) - 1;
-    let year = today.getFullYear();
-    let d = new Date(year, month, day);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    if (d > tomorrow) d = new Date(year - 1, month, day);
-    if (!isNaN(d.getTime())) {
-      return { date: toISO(d), cleanText: remaining.replace(shortM[0], '').trim() };
+    if (day >= 1 && day <= 31 && month >= 0 && month <= 11) {
+      let year = today.getFullYear();
+      let d = new Date(year, month, day);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      if (d > tomorrow) d = new Date(year - 1, month, day);
+      if (!isNaN(d.getTime())) {
+        const clean = remaining.replace(shortM[0], ' ').replace(/\s{2,}/g, ' ').trim();
+        return {
+          date: toISO(d),
+          cleanText: clean.replace(/^[\s,;:\-]+/, '').replace(/[\s,;:\-]+$/, '').trim(),
+          hasExplicitDate: true
+        };
+      }
     }
   }
 
-  // Hôm qua, hôm kia
-  if (/\b(hôm qua|tối qua|sáng qua|chiều qua|trưa qua)\b/i.test(remaining)) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - 1);
-    return { date: toISO(d), cleanText: remaining.replace(/\b(hôm qua|tối qua|sáng qua|chiều qua|trưa qua)\b/i, '').trim() };
-  }
-  if (/\b(hôm kia|bữa kia)\b/i.test(remaining)) {
+  // 4. Hôm kia (-2 ngày): hôm kia, bữa kia, bữa hôm kia, hkia, h kia
+  const homKiaRx = /(?:(?:vào|hôm|bữa)\s+)?\b(hôm kia|bữa kia|bữa hôm kia|hkia|h\s*kia)\b/iu;
+  const homKiaM = remaining.match(homKiaRx);
+  if (homKiaM) {
     const d = new Date(today);
     d.setDate(d.getDate() - 2);
-    return { date: toISO(d), cleanText: remaining.replace(/\b(hôm kia|bữa kia)\b/i, '').trim() };
-  }
-  if (/\b(hôm nay|sáng nay|tối nay|chiều nay|trưa nay)\b/i.test(remaining)) {
-    return { date: toISO(today), cleanText: remaining.replace(/\b(hôm nay|sáng nay|tối nay|chiều nay|trưa nay)\b/i, '').trim() };
+    const clean = remaining.replace(homKiaM[0], ' ').replace(/\s{2,}/g, ' ').trim();
+    return {
+      date: toISO(d),
+      cleanText: clean.replace(/^[\s,;:\-]+/, '').replace(/[\s,;:\-]+$/, '').trim(),
+      hasExplicitDate: true
+    };
   }
 
-  return { date: toISO(today), cleanText: remaining.trim() };
+  // 5. Hôm qua (-1 ngày): hôm qua, tối qua, sáng qua, chiều qua, trưa qua, đêm qua, hqua, h qua, hq, tqua, t qua, squá, s qua, bữa qua
+  const homQuaRx = /(?:(?:vào|hôm|bữa)\s+)?\b(hôm qua|tối qua|sáng qua|chiều qua|trưa qua|đêm qua|hqua|h\s*qua|hq|tqua|t\s*qua|squá|s\s*qua|bữa qua)\b/iu;
+  const homQuaM = remaining.match(homQuaRx);
+  if (homQuaM) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - 1);
+    const clean = remaining.replace(homQuaM[0], ' ').replace(/\s{2,}/g, ' ').trim();
+    return {
+      date: toISO(d),
+      cleanText: clean.replace(/^[\s,;:\-]+/, '').replace(/[\s,;:\-]+$/, '').trim(),
+      hasExplicitDate: true
+    };
+  }
+
+  // 6. 3 ngày trước (-3 ngày)
+  const baNgayRx = /\b(3\s*ngày\s*trước|ba\s*ngày\s*trước)\b/iu;
+  const baNgayM = remaining.match(baNgayRx);
+  if (baNgayM) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - 3);
+    const clean = remaining.replace(baNgayM[0], ' ').replace(/\s{2,}/g, ' ').trim();
+    return {
+      date: toISO(d),
+      cleanText: clean.replace(/^[\s,;:\-]+/, '').replace(/[\s,;:\-]+$/, '').trim(),
+      hasExplicitDate: true
+    };
+  }
+
+  // 7. Hôm nay (0 ngày): hôm nay, sáng nay, tối nay, chiều nay, trưa nay, nay, hnay, h nay, bữa nay
+  const homNayRx = /(?:(?:vào|hôm|bữa)\s+)?\b(hôm nay|sáng nay|tối nay|chiều nay|trưa nay|nay|hnay|h\s*nay|bữa nay)\b/iu;
+  const homNayM = remaining.match(homNayRx);
+  if (homNayM) {
+    const clean = remaining.replace(homNayM[0], ' ').replace(/\s{2,}/g, ' ').trim();
+    return {
+      date: toISO(today),
+      cleanText: clean.replace(/^[\s,;:\-]+/, '').replace(/[\s,;:\-]+$/, '').trim(),
+      hasExplicitDate: true
+    };
+  }
+
+  // 8. Thứ trong tuần (thứ hai ... chủ nhật)
+  const thuRx = /(?:(?:vào|hôm)\s+)?\b(thứ\s+[2-7]|thứ\s+(?:hai|ba|tư|năm|sáu|bảy)|chủ\s*nhật|cn)\b/iu;
+  const thuM = remaining.match(thuRx);
+  if (thuM) {
+    const thuStr = thuM[1].toLowerCase().replace(/\s+/g, ' ');
+    const mapThu: Record<string, number> = {
+      'thứ 2': 1, 'thứ hai': 1,
+      'thứ 3': 2, 'thứ ba': 2,
+      'thứ 4': 3, 'thứ tư': 3,
+      'thứ 5': 4, 'thứ năm': 4,
+      'thứ 6': 5, 'thứ sáu': 5,
+      'thứ 7': 6, 'thứ bảy': 6,
+      'chủ nhật': 0, 'cn': 0
+    };
+    const targetDow = mapThu[thuStr];
+    if (targetDow !== undefined) {
+      const d = new Date(today);
+      d.setHours(0, 0, 0, 0);
+      const diff = (d.getDay() - targetDow + 7) % 7;
+      d.setDate(d.getDate() - diff);
+      const clean = remaining.replace(thuM[0], ' ').replace(/\s{2,}/g, ' ').trim();
+      return {
+        date: toISO(d),
+        cleanText: clean.replace(/^[\s,;:\-]+/, '').replace(/[\s,;:\-]+$/, '').trim(),
+        hasExplicitDate: true
+      };
+    }
+  }
+
+  return { date: toISO(today), cleanText: remaining.trim(), hasExplicitDate: false };
 }
 
 /**
@@ -268,15 +377,33 @@ export function guessCategoryAndType(text: string): { type: 'income' | 'expense'
   const trimmed = text.trim();
 
   // 1. Phân biệt rõ việc CHO và NHẬN:
-  // A. Trường hợp người khác cho mình ("ABC cho ...", "được cho ...", "được ABC cho ...", "ABC cho mình ...")
+  // A. Trường hợp người khác cho mình ("tiền thừa anh Thắng cho", "anh Thắng cho tiền thừa", "được cho", "tiền mẹ cho", "khách bo"...)
   // => MÌNH ĐƯỢC NHẬN = THU NHẬP (INCOME)
-  if (/^được\s+(?:(?:tiền\s+)?cho|tặng|lì xì|biếu)(?:\s+\d|;|,|$|\s+)/iu.test(trimmed)) {
+  if (/^(?:được|nhận)\s+(?:(?:tiền\s+)?(?:thừa|thối|dư\s+)?(?:cho|tặng|lì xì|biếu|thưởng)|quà)(?:\s+\d|;|,|$|\s+)/iu.test(trimmed)) {
     return { type: 'income', category: 'Được tặng & Cho' };
   }
 
-  const aiDoChoMatch = trimmed.match(/^(?:được\s+)?([^\d,.;]+?)\s+(?:cho|lì xì|tặng|biếu)(?:\s+(?:tiền|tôi|mình|em|con|cháu|bản\s*thân))?(?:\s+\d|;|,|$)/iu);
+  // Tiền thừa / tiền thối / tiền bo / tiền tip
+  if (/^(?:tiền\s+)?(?:thừa|thối|dư|bo|tip)\b/iu.test(trimmed)) {
+    // Nếu có "ai đó cho", ví dụ "tiền thừa anh Thắng cho"
+    if (/\b(?:cho|tặng|biếu|thưởng|gửi|để lại)\b/iu.test(trimmed)) {
+      return { type: 'income', category: 'Được tặng & Cho' };
+    }
+    // Nếu chỉ ghi "tiền bo", "tiền tip", "nhận tiền thừa"
+    if (/\b(?:bo|tip|nhận|thu)\b/iu.test(trimmed)) {
+      return { type: 'income', category: 'Thu nhập khác' };
+    }
+  }
+
+  // Khách bo, khách tip, khách cho
+  if (/\bkhách\s+(?:bo|tip|cho|tặng)\b/iu.test(trimmed)) {
+    return { type: 'income', category: 'Thu nhập khác' };
+  }
+
+  // Cấu trúc: [tiền thừa/tiền...] [ai đó] cho / tặng / biếu / lì xì / thưởng
+  const aiDoChoMatch = trimmed.match(/(?:^(?:tiền(?:\s+(?:thừa|thối|dư))?\s+)?|(?:^được\s+))([^\d,.;]+?)\s+(?:cho|lì xì|tặng|biếu|thưởng)(?:\s+(?:tiền(?:\s+(?:thừa|thối|dư))?|mình|tôi|em|con|cháu|giữ))?(?:\s+\d|;|,|$)/iu);
   if (aiDoChoMatch) {
-    const subject = aiDoChoMatch[1].trim();
+    const subject = aiDoChoMatch[1].trim().toLowerCase();
     // Nếu chủ ngữ KHÔNG PHẢI là ngôi thứ nhất ("tôi", "mình", "tao")
     if (!/^(?:tôi|mình|tao)$/iu.test(subject)) {
       return { type: 'income', category: 'Được tặng & Cho' };
@@ -307,7 +434,7 @@ export function guessCategoryAndType(text: string): { type: 'income' | 'expense'
     return { type: 'income', category: 'Thu nhập khác' };
   }
 
-  // 2. Nhận diện chi tiêu theo từ khóa:
+  // 3. Nhận diện chi tiêu theo từ khóa:
   // Ăn uống: cơm, phở, trà sữa, cafe, ăn, uống, bún, bánh...
   if (matchViWords(lower, 'ăn|uống|cơm|phở|bún|bánh|mì|miến|cháo|thịt|rau|cá|cafe|cà phê|coffee|trà|trà sữa|nước|sinh tố|siêu thị|chợ|buffet|quán|lẩu|nướng|nhậu|trưa|tối|sáng|bữa')) {
     return { type: 'expense', category: 'Ăn uống' };
@@ -488,15 +615,16 @@ export function parseMultiSmartInput(rawText: string, defaultDate: string = new 
   const clauseRegex = /(?:[\r\n;]+|(?<!\d),(?!\d)|\s+(?:và|rồi|\+)\s+)/i;
   const rawClauses = protectedText.split(clauseRegex);
 
-  // 3. Kiểm tra ngày chung nếu người dùng mở đầu bằng ngày (ví dụ: "hôm qua nhận thưởng 1tr, cafe 30k")
-  let globalDate = defaultDate;
-  const firstDateCheck = parseDateFromVietnameseText(trimmed);
-  if (firstDateCheck.date && firstDateCheck.date !== defaultDate) {
-    globalDate = firstDateCheck.date;
+  // 3. Kiểm tra ngày chung nếu người dùng mở đầu bằng ngày (ví dụ: "hôm qua: nhận thưởng 1tr, cafe 30k")
+  let currentContextDate = defaultDate;
+  if (rawClauses.length > 0) {
+    const firstClauseDate = parseDateFromVietnameseText(rawClauses[0]);
+    if (firstClauseDate.hasExplicitDate && firstClauseDate.date) {
+      currentContextDate = firstClauseDate.date;
+    }
   }
 
   const items: ParsedTransactionItem[] = [];
-  let pendingPrefix = '';
 
   for (let i = 0; i < rawClauses.length; i++) {
     let clause = rawClauses[i].trim();
@@ -505,35 +633,39 @@ export function parseMultiSmartInput(rawText: string, defaultDate: string = new 
     // Khôi phục dấu phẩy trong ngoặc
     clause = clause.replace(/__COMMA__/g, ',').replace(/__SEMI__/g, ';');
 
-    if (pendingPrefix) {
-      clause = `${pendingPrefix} ${clause}`;
-      pendingPrefix = '';
-    }
+    // Dọn sạch gạch đầu dòng, bullet point ở đầu clause
+    clause = clause.replace(/^[\-\*\+•\s]+/, '').trim();
+    if (!clause) continue;
 
     const parsed = parseSmartInput(clause);
+    const dCheck = parseDateFromVietnameseText(clause);
 
-    // Mệnh đề không chứa số tiền: có thể là từ chỉ ngày (hôm qua, ...) hoặc tiền tố mô tả
+    // Mệnh đề không chứa số tiền:
+    // Nếu là từ chỉ ngày (ví dụ "Hôm qua:", "20/10:"), cập nhật ngày ngữ cảnh cho các dòng sau.
+    // Các dòng không có tiền (tiêu đề bảng, ghi chú, STT, v.v.) ĐỀU BỊ BỎ QUA HOÀN TOÀN (không tạo giao dịch 0đ).
     if (parsed.amount === null || parsed.amount <= 0) {
-      const dCheck = parseDateFromVietnameseText(clause);
-      if (dCheck.date && dCheck.date !== defaultDate) {
-        globalDate = dCheck.date;
-      }
-      if (dCheck.cleanText) {
-        pendingPrefix = dCheck.cleanText;
+      if (dCheck.hasExplicitDate && dCheck.date) {
+        currentContextDate = dCheck.date;
       }
       continue;
     }
 
-    // Làm sạch từ đệm (đc, được, hết, mất...)
-    let desc = cleanFillerWords(parsed.description || clause);
+    // Nếu CÓ SỐ TIỀN:
+    let itemDate = currentContextDate;
+    let desc = parsed.description || clause;
 
-    // Tách ngày riêng của mệnh đề (nếu có)
-    const clauseDate = parseDateFromVietnameseText(desc);
-    let itemDate = globalDate;
-    if (clauseDate.date && clauseDate.date !== defaultDate) {
+    // Kiểm tra xem mệnh đề có mốc thời gian riêng không (ví dụ "nay ăn sáng 20k", "hôm 20-10 ăn tối 40k")
+    const clauseDate = parseDateFromVietnameseText(desc || clause);
+    if (clauseDate.hasExplicitDate && clauseDate.date) {
       itemDate = clauseDate.date;
-      desc = cleanFillerWords(clauseDate.cleanText || desc);
+      currentContextDate = clauseDate.date; // Cập nhật ngày cho các mệnh đề sau
+      desc = clauseDate.cleanText;
     }
+
+    // Loại bỏ số thứ tự ở đầu như "1. ", "2) " nếu có (ví dụ khi copy từ danh sách đánh số)
+    desc = desc.replace(/^\s*\d+[\.\)\-:]\s*/, '');
+    desc = cleanFillerWords(desc);
+    desc = desc.replace(/^[\s,;:\-]+/, '').replace(/[\s,;:\-]+$/, '').trim();
 
     // Kiểm tra xem mệnh đề có phải là khoản nợ (cho vay hoặc đi vay) không
     const debtInfo = detectDebtInfo(desc || clause);
