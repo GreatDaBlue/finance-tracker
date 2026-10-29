@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { api, formatVND, getUserDisplayName, type SummaryStats, type CategoryStat, type DateStat, type FilterParams, type User, type CreditCardSummary } from '../lib/api';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend
 } from 'recharts';
-import { TrendingUp, TrendingDown, Wallet, ArrowUpRight, ArrowDownRight, HelpCircle, CreditCard as CreditCardIcon } from 'lucide-react';
+import { TrendingUp, TrendingDown, Wallet, ArrowUpRight, ArrowDownRight, HelpCircle, CreditCard as CreditCardIcon, X } from 'lucide-react';
 
 interface Props {
   filters: FilterParams;
@@ -239,25 +240,10 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
   const [loading, setLoading] = useState(true);
   const [showRuleTooltip, setShowRuleTooltip] = useState(false);
   const [creditSummary, setCreditSummary] = useState<CreditCardSummary | null>(null);
-  const tooltipRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     api.getCreditCards().then(res => setCreditSummary(res.summary)).catch(() => {});
   }, [refreshKey]);
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (tooltipRef.current && !tooltipRef.current.contains(event.target as Node)) {
-        setShowRuleTooltip(false);
-      }
-    }
-    if (showRuleTooltip) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showRuleTooltip]);
 
   const activePeriodRange = getDashboardPeriodRange(quickPeriod);
 
@@ -535,96 +521,111 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
             </span>
 
             {/* Nút ? giải thích chuẩn vàng 50/30/20 */}
-            <div className="relative inline-block" ref={tooltipRef}>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowRuleTooltip(v => !v);
+            <button
+              type="button"
+              onClick={() => setShowRuleTooltip(true)}
+              className="p-1 rounded-full text-slate-400 hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              title="Tìm hiểu quy tắc 50/30/20"
+              aria-label="Tìm hiểu quy tắc 50/30/20"
+            >
+              <HelpCircle className="w-4 h-4" />
+            </button>
+
+            {/* Modal Portal giải thích Chuẩn Vàng 50/30/20 */}
+            {showRuleTooltip && createPortal(
+              <div
+                className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3.5 sm:p-4 overflow-y-auto animate-in fade-in duration-150"
+                onClick={e => {
+                  if (e.target === e.currentTarget) setShowRuleTooltip(false);
                 }}
-                className="p-1 rounded-full text-slate-400 hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-                title="Tìm hiểu quy tắc 50/30/20"
-                aria-label="Tìm hiểu quy tắc 50/30/20"
               >
-                <HelpCircle className="w-4 h-4" />
-              </button>
-
-              {/* Tooltip Popover giải thích chuẩn vàng 50/30/20 */}
-              {showRuleTooltip && (
-                <>
-                  {/* Backdrop mờ trên mobile để chạm ra ngoài là đóng */}
-                  <div
-                    className="fixed inset-0 z-40 bg-slate-900/40 dark:bg-black/60 sm:hidden backdrop-blur-2xs"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowRuleTooltip(false);
-                    }}
-                  />
-
-                  {/* Panel nội dung: Modal giữa màn hình trên Mobile, Popover góc trái trên Desktop */}
-                  <div
-                    className="fixed sm:absolute z-50 inset-x-3 top-1/2 -translate-y-1/2 sm:inset-x-auto sm:left-0 sm:top-full sm:translate-y-0 sm:mt-2 w-auto sm:w-[360px] max-w-sm sm:max-w-none mx-auto sm:mx-0 p-4 rounded-2xl shadow-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 text-left animate-in fade-in zoom-in-95 duration-150 max-h-[85vh] overflow-y-auto"
-                    onClick={e => e.stopPropagation()}
-                  >
-                    <div className="space-y-2.5 text-xs text-slate-600 dark:text-zinc-300">
-                      <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-2">
-                        <span className="font-bold text-slate-800 dark:text-zinc-100 text-xs sm:text-sm">
-                          📐 Chuẩn Vàng 50/30/20 là gì?
-                        </span>
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); setShowRuleTooltip(false); }}
-                          className="text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 p-1 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-800 leading-none text-sm font-bold cursor-pointer"
-                          title="Đóng"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                      
-                      <p className="text-[11px] text-slate-500 dark:text-zinc-400 leading-relaxed">
-                        Quy tắc phân bổ thu nhập kinh điển của trường Đại học Harvard, giúp {userName} cân bằng cuộc sống và tích lũy bền vững:
-                      </p>
-
-                      <div className="space-y-1.5">
-                        <div className="p-2 rounded-lg bg-blue-50/70 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900/50">
-                          <div className="font-semibold text-blue-700 dark:text-blue-300 flex items-center justify-between text-[11px]">
-                            <span>🏠 50% Nhu cầu thiết yếu</span>
-                            <span className="text-[9.5px] bg-blue-100 dark:bg-blue-900/70 text-blue-800 dark:text-blue-200 px-1.5 py-0.5 rounded font-bold">Needs</span>
-                          </div>
-                          <p className="text-[10.5px] text-blue-950/80 dark:text-blue-200/80 mt-0.5">
-                            Tiền nhà, ăn uống cơ bản, điện nước, xăng xe, y tế, học phí, chi phí tối thiểu để duy trì cuộc sống...
-                          </p>
-                        </div>
-
-                        <div className="p-2 rounded-lg bg-amber-50/70 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900/50">
-                          <div className="font-semibold text-amber-700 dark:text-amber-300 flex items-center justify-between text-[11px]">
-                            <span>🎬 30% Mong muốn & Sở thích</span>
-                            <span className="text-[9.5px] bg-amber-100 dark:bg-amber-900/70 text-amber-800 dark:text-amber-200 px-1.5 py-0.5 rounded font-bold">Wants</span>
-                          </div>
-                          <p className="text-[10.5px] text-amber-950/80 dark:text-amber-200/80 mt-0.5">
-                            Mua sắm, ăn ngoài, du lịch, xem phim, cà phê, sở thích cá nhân nâng cao chất lượng sống...
-                          </p>
-                        </div>
-
-                        <div className="p-2 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/50">
-                          <div className="font-semibold text-emerald-700 dark:text-emerald-300 flex items-center justify-between text-[11px]">
-                            <span>💰 20% Tiết kiệm & Tích lũy</span>
-                            <span className="text-[9.5px] bg-emerald-100 dark:bg-emerald-900/70 text-emerald-800 dark:text-emerald-200 px-1.5 py-0.5 rounded font-bold">Savings</span>
-                          </div>
-                          <p className="text-[10.5px] text-emerald-950/80 dark:text-emerald-200/80 mt-0.5">
-                            Quỹ khẩn cấp (3-6 tháng sinh hoạt), gửi tiết kiệm, đầu tư sinh lời và trả nợ gốc (chuẩn tối thiểu).
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="pt-1.5 border-t border-slate-100 dark:border-zinc-800 text-[10px] text-slate-400 dark:text-zinc-500 italic">
-                        💡 Mốc 20% là chuẩn vàng tối thiểu. Càng tiết kiệm nhiều hơn (35%, 50%, 70%), {userName} càng nhanh chóng đạt Độc Lập Tài Chính (FIRE)!
+                <div
+                  className="bg-white dark:bg-zinc-900 rounded-3xl max-w-md w-full shadow-2xl border border-slate-100 dark:border-zinc-800 overflow-hidden my-auto max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-150"
+                  onClick={e => e.stopPropagation()}
+                >
+                  {/* Header Modal */}
+                  <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-zinc-800 flex items-center justify-between gap-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white shrink-0">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-xl">📐</span>
+                      <div>
+                        <h3 className="font-bold text-base leading-tight text-white">
+                          Chuẩn Vàng 50/30/20 là gì?
+                        </h3>
+                        <p className="text-[11px] text-blue-100 mt-0.5">
+                          Quy tắc phân bổ tài chính kinh điển của Đại học Harvard
+                        </p>
                       </div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowRuleTooltip(false)}
+                      className="p-1.5 rounded-full hover:bg-white/20 transition-colors text-white/90 hover:text-white cursor-pointer shrink-0"
+                      title="Đóng"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
                   </div>
-                </>
-              )}
-            </div>
+
+                  {/* Nội dung chi tiết */}
+                  <div className="p-4 sm:p-5 overflow-y-auto space-y-3 text-xs">
+                    <p className="text-slate-600 dark:text-zinc-300 leading-relaxed text-xs">
+                      Quy tắc giúp <strong>{userName}</strong> cân bằng cuộc sống và tích lũy bền vững bằng cách chia thu nhập làm 3 phần:
+                    </p>
+
+                    <div className="space-y-2.5">
+                      {/* 50% Nhu cầu */}
+                      <div className="p-3 rounded-2xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-900/60">
+                        <div className="font-bold text-blue-800 dark:text-blue-200 flex items-center justify-between text-xs mb-1">
+                          <span>🏠 50% Nhu cầu thiết yếu</span>
+                          <span className="text-[10px] bg-blue-200/80 dark:bg-blue-900 text-blue-900 dark:text-blue-100 px-2 py-0.5 rounded-md font-extrabold">Needs</span>
+                        </div>
+                        <p className="text-[11.5px] text-blue-950/85 dark:text-blue-200/85 leading-relaxed">
+                          Tiền nhà, ăn uống cơ bản, điện nước, xăng xe, y tế, học phí, các chi phí bắt buộc tối thiểu để duy trì cuộc sống...
+                        </p>
+                      </div>
+
+                      {/* 30% Mong muốn */}
+                      <div className="p-3 rounded-2xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-900/60">
+                        <div className="font-bold text-amber-800 dark:text-amber-200 flex items-center justify-between text-xs mb-1">
+                          <span>🎬 30% Mong muốn & Sở thích</span>
+                          <span className="text-[10px] bg-amber-200/80 dark:bg-amber-900 text-amber-900 dark:text-amber-100 px-2 py-0.5 rounded-md font-extrabold">Wants</span>
+                        </div>
+                        <p className="text-[11.5px] text-amber-950/85 dark:text-amber-200/85 leading-relaxed">
+                          Mua sắm, ăn ngoài, du lịch, xem phim, cà phê, sở thích cá nhân giúp nâng cao chất lượng tinh thần...
+                        </p>
+                      </div>
+
+                      {/* 20% Tiết kiệm */}
+                      <div className="p-3 rounded-2xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-900/60">
+                        <div className="font-bold text-emerald-800 dark:text-emerald-200 flex items-center justify-between text-xs mb-1">
+                          <span>💰 20% Tiết kiệm & Tích lũy</span>
+                          <span className="text-[10px] bg-emerald-200/80 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-100 px-2 py-0.5 rounded-md font-extrabold">Savings</span>
+                        </div>
+                        <p className="text-[11.5px] text-emerald-950/85 dark:text-emerald-200/85 leading-relaxed">
+                          Quỹ khẩn cấp (3-6 tháng chi tiêu), gửi tiết kiệm, đầu tư sinh lời và trả nợ gốc (mức chuẩn vàng tối thiểu).
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="p-3 rounded-2xl bg-purple-50/80 dark:bg-purple-950/30 border border-purple-200/70 dark:border-purple-900/50 text-[11px] text-purple-900 dark:text-purple-200 leading-relaxed font-medium">
+                      💡 <strong>Lời khuyên:</strong> Mốc 20% là chuẩn tối thiểu. Càng tiết kiệm nhiều hơn (35%, 50%, 70%), <strong>{userName}</strong> càng nhanh chóng đạt được <strong>Tự Do Tài Chính (FIRE)</strong>!
+                    </div>
+                  </div>
+
+                  {/* Nút Đã hiểu */}
+                  <div className="p-3 sm:p-4 border-t border-slate-100 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-800/50 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setShowRuleTooltip(false)}
+                      className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer"
+                    >
+                      Đã hiểu
+                    </button>
+                  </div>
+                </div>
+              </div>,
+              document.body
+            )}
           </div>
 
           <h4 className="text-base font-bold text-slate-800 dark:text-zinc-100">
