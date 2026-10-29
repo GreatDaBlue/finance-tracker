@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { api, formatDate, type FilterParams } from '../lib/api';
+import { api, formatDate, thisMonthRange, type FilterParams } from '../lib/api';
 import { Search, X, ChevronDown, Calendar, RotateCcw, HelpCircle, Sparkles } from 'lucide-react';
 
 interface Props {
@@ -119,7 +119,7 @@ export default function FilterBar({ filters, onFiltersChange }: Props) {
   }
 
   function clearAll() {
-    onFiltersChange({});
+    onFiltersChange(thisMonthRange());
     setNaturalInput('');
     setParseResult('');
   }
@@ -147,9 +147,20 @@ export default function FilterBar({ filters, onFiltersChange }: Props) {
     return base + 'border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-700 hover:border-slate-300 dark:hover:border-zinc-600';
   }
 
-  // Luôn cho phép xóa nếu có bất kỳ bộ lọc nào, hoặc có text trong ô tìm kiếm, hoặc có kết quả parse
-  const hasFilters = Object.values(filters).some(v => v !== undefined && v !== '');
-  const canClear = hasFilters || naturalInput.trim() !== '' || parseResult !== '';
+  // Trạng thái mặc định ban đầu: là khoảng thời gian tháng này và không có tiêu chí lọc tùy chỉnh nào khác
+  const defaultRange = thisMonthRange();
+  const isDefaultDate = filters.dateFrom === defaultRange.dateFrom && filters.dateTo === defaultRange.dateTo;
+  const hasCustomCriteria = Boolean(
+    filters.search ||
+    filters.type ||
+    filters.category ||
+    filters.minAmount !== undefined ||
+    filters.maxAmount !== undefined ||
+    naturalInput.trim() !== '' ||
+    parseResult !== ''
+  );
+  // Chỉ hiển thị nút "Xóa lọc" khi người dùng ĐANG THỰC SỰ LỌC (đổi ngày, gõ tìm kiếm, chọn loại, chọn danh mục...)
+  const canClear = hasCustomCriteria || (!isDefaultDate && (Boolean(filters.dateFrom) || Boolean(filters.dateTo)));
 
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 p-4 space-y-3 transition-colors">
