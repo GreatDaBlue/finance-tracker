@@ -282,8 +282,33 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 export const api = {
   // ── Auth ─────────────────────────────────────────────────────────────────
-  register(data: { username: string; password: string; name?: string }): Promise<AuthResponse> {
+  register(data: { username: string; password: string; name?: string; email?: string }): Promise<AuthResponse> {
     return request<AuthResponse>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  },
+
+  forgotPassword(identifier: string): Promise<{
+    success: boolean;
+    message: string;
+    maskedEmail: string;
+    identifier: string;
+    simulated?: boolean;
+    simulatedOtp?: string;
+  }> {
+    return request('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ identifier })
+    });
+  },
+
+  resetPassword(data: {
+    identifier: string;
+    otp: string;
+    newPassword: string;
+  }): Promise<AuthResponse> {
+    return request<AuthResponse>('/auth/reset-password', {
       method: 'POST',
       body: JSON.stringify(data)
     });

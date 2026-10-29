@@ -320,6 +320,18 @@ async function initPostgresTables(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_debts_user            ON debts(user_id);
     CREATE INDEX IF NOT EXISTS idx_recurring_user        ON recurring_transactions(user_id);
     CREATE INDEX IF NOT EXISTS idx_credit_cards_user     ON credit_cards(user_id);
+
+    CREATE TABLE IF NOT EXISTS password_resets (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      email VARCHAR(255) NOT NULL,
+      otp VARCHAR(10) NOT NULL,
+      expires_at BIGINT NOT NULL,
+      used INTEGER DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets(user_id);
+    CREATE INDEX IF NOT EXISTS idx_password_resets_otp ON password_resets(otp);
   `);
 }
 
@@ -461,6 +473,19 @@ async function initSqliteTables(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_debts_user            ON debts(user_id);
     CREATE INDEX IF NOT EXISTS idx_recurring_user        ON recurring_transactions(user_id);
     CREATE INDEX IF NOT EXISTS idx_credit_cards_user     ON credit_cards(user_id);
+
+    CREATE TABLE IF NOT EXISTS password_resets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      email TEXT NOT NULL,
+      otp TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      used INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets(user_id);
+    CREATE INDEX IF NOT EXISTS idx_password_resets_otp ON password_resets(otp);
   `);
 }
 
