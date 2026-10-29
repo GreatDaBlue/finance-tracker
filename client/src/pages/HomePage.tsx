@@ -356,8 +356,8 @@ export default function HomePage() {
               </div>
             )}
 
-            {/* Thanh lọc — chỉ hiện ở tab Giao dịch và Tổng quan */}
-            {(activeTab === 'list' || activeTab === 'dashboard') && (
+            {/* Thanh lọc — chỉ hiển thị ở tab Giao dịch */}
+            {activeTab === 'list' && (
               <FilterBar filters={filters} onFiltersChange={f => setFilters(f)} />
             )}
 
@@ -380,7 +380,7 @@ export default function HomePage() {
             {visitedTabs['dashboard'] && (
               <div className={activeTab === 'dashboard' ? 'block' : 'hidden'}>
                 <Dashboard
-                  filters={filters}
+                  filters={thisMonthRange()}
                   user={currentUser}
                   onSwitchTab={setActiveTab}
                   refreshKey={refreshKey}
