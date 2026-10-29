@@ -312,26 +312,68 @@ export default function Dashboard({ filters, user, onSwitchTab }: Props) {
         </div>
       )}
 
-      {/* Summary cards — Vừa đủ 1 hàng (3 cột) trên mọi màn hình */}
-      <div className="grid grid-cols-3 gap-2 sm:gap-4">
-        {/* Tổng thu */}
-        <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 p-2 sm:p-4 sm:p-5 transition-colors flex flex-col justify-between">
+      {/* Summary cards — Mobile: Dòng tiền ròng làm Hero card full-width ở trên, 2 cột Thu & Chi ở dưới. Desktop: 3 cột ngang chuẩn */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-4">
+        {/* Dòng tiền ròng — Hero Card trên Mobile (col-span-2 md:col-span-1 md:order-3) */}
+        <div className={`col-span-2 md:col-span-1 md:order-3 rounded-2xl shadow-sm border p-3.5 sm:p-5 transition-all flex flex-col justify-between ${
+          (summary?.balance ?? 0) >= 0
+            ? 'bg-gradient-to-br from-blue-600 via-blue-600 to-indigo-700 border-blue-500 text-white shadow-md shadow-blue-500/15'
+            : 'bg-gradient-to-br from-rose-600 via-rose-600 to-red-700 border-rose-500 text-white shadow-md shadow-rose-500/15'
+        }`}>
           <div>
-            <div className="flex items-center justify-between mb-1 sm:mb-2 gap-1">
-              <span className="text-[10.5px] xs:text-xs sm:text-sm text-slate-500 dark:text-zinc-400 font-medium leading-tight">Tổng thu</span>
-              <div className="w-5 h-5 sm:w-8 sm:h-8 bg-green-50 dark:bg-emerald-950/60 rounded-md sm:rounded-xl flex items-center justify-center shrink-0">
-                <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 text-green-500 dark:text-emerald-400" />
+            <div className="flex items-center justify-between mb-2 gap-2">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs sm:text-sm text-white/95 font-bold leading-tight">
+                  Dòng tiền ròng (Số dư)
+                </span>
+                <span className={`text-[10px] px-2 py-0.5 rounded-md font-extrabold ${
+                  (summary?.balance ?? 0) >= 0 ? 'bg-white/20 text-white' : 'bg-black/25 text-white'
+                }`}>
+                  {(summary?.balance ?? 0) >= 0 ? 'Thặng dư (+)' : 'Thâm hụt (-)'}
+                </span>
+              </div>
+              <div className="w-7 h-7 sm:w-8 sm:h-8 bg-white/20 backdrop-blur-xs rounded-xl flex items-center justify-center shrink-0">
+                <Wallet className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />
               </div>
             </div>
-            <p className="text-xs xs:text-sm sm:text-xl md:text-2xl font-bold text-green-600 dark:text-emerald-400 tracking-tight" title={formatVND(summary?.totalIncome ?? 0)}>
+
+            <p className="text-xl xs:text-2xl sm:text-2xl md:text-3xl font-black text-white tracking-tight tabular-nums py-0.5" title={formatVND(summary?.balance ?? 0)}>
+              {(summary?.balance ?? 0) > 0
+                ? `+${formatVND(summary?.balance ?? 0)}`
+                : formatVND(summary?.balance ?? 0)}
+            </p>
+          </div>
+          
+          <div className="mt-2.5 pt-2 border-t border-white/15 flex items-center justify-between text-xs text-white/95">
+            <span className="text-[11px] sm:text-xs font-semibold">
+              Tiết kiệm: <strong className="text-white font-extrabold">{savingsRate}%</strong> thu nhập
+            </span>
+            <span className="text-[10px] sm:text-[11px] text-white/80 hidden xs:inline">
+              {(summary?.balance ?? 0) >= 0 ? 'Dòng tiền dương an toàn' : 'Cần tối ưu chi phí'}
+            </span>
+          </div>
+        </div>
+
+        {/* Tổng thu — col-span-1 md:order-1 */}
+        <div className="col-span-1 md:order-1 bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 p-3 sm:p-5 transition-colors flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-1.5 sm:mb-2 gap-1">
+              <span className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 font-medium leading-tight">
+                Tổng thu
+              </span>
+              <div className="w-6 h-6 sm:w-8 sm:h-8 bg-emerald-50 dark:bg-emerald-950/60 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0">
+                <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600 dark:text-emerald-400" />
+              </div>
+            </div>
+            <p className="text-sm xs:text-base sm:text-xl md:text-2xl font-bold text-emerald-600 dark:text-emerald-400 tracking-tight tabular-nums" title={formatVND(summary?.totalIncome ?? 0)}>
               {formatVND(summary?.totalIncome ?? 0)}
             </p>
           </div>
           
           {/* Số lượng giao dịch & so sánh */}
-          <div className="mt-1.5 sm:mt-2 text-[10px] sm:text-xs space-y-0.5">
+          <div className="mt-2 text-[10px] sm:text-xs space-y-0.5">
             {comparison?.incomeChangePct !== null && comparison?.incomeChangePct !== undefined ? (
-              <div className="flex items-center gap-0.5 font-semibold text-[9.5px] sm:text-[11px]">
+              <div className="flex items-center gap-0.5 font-semibold text-[10px] sm:text-[11px]">
                 <span className={comparison.incomeChangePct >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-slate-500 dark:text-zinc-400"}>
                   {comparison.incomeChangePct >= 0 ? `↑+${comparison.incomeChangePct}%` : `↓${comparison.incomeChangePct}%`}
                 </span>
@@ -344,66 +386,38 @@ export default function Dashboard({ filters, user, onSwitchTab }: Props) {
           </div>
         </div>
 
-        {/* Tổng chi */}
-        <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 p-2 sm:p-4 sm:p-5 transition-colors flex flex-col justify-between">
+        {/* Tổng chi — col-span-1 md:order-2 */}
+        <div className="col-span-1 md:order-2 bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 p-3 sm:p-5 transition-colors flex flex-col justify-between">
           <div>
-            <div className="flex items-center justify-between mb-1 sm:mb-2 gap-1">
-              <span className="text-[10.5px] xs:text-xs sm:text-sm text-slate-500 dark:text-zinc-400 font-medium leading-tight">Tổng chi</span>
-              <div className="w-5 h-5 sm:w-8 sm:h-8 bg-red-50 dark:bg-rose-950/60 rounded-md sm:rounded-xl flex items-center justify-center shrink-0">
-                <TrendingDown className="w-3 h-3 sm:w-4 sm:h-4 text-red-500 dark:text-rose-400" />
+            <div className="flex items-center justify-between mb-1.5 sm:mb-2 gap-1">
+              <span className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 font-medium leading-tight">
+                Tổng chi
+              </span>
+              <div className="w-6 h-6 sm:w-8 sm:h-8 bg-rose-50 dark:bg-rose-950/60 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0">
+                <TrendingDown className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-rose-500 dark:text-rose-400" />
               </div>
             </div>
-            <p className="text-xs xs:text-sm sm:text-xl md:text-2xl font-bold text-red-500 dark:text-rose-400 tracking-tight" title={formatVND(summary?.totalExpense ?? 0)}>
+            <p className="text-sm xs:text-base sm:text-xl md:text-2xl font-bold text-rose-500 dark:text-rose-400 tracking-tight tabular-nums" title={formatVND(summary?.totalExpense ?? 0)}>
               {formatVND(summary?.totalExpense ?? 0)}
             </p>
           </div>
           
           {/* Số lượng giao dịch & so sánh */}
-          <div className="mt-1.5 sm:mt-2 text-[10px] sm:text-xs space-y-0.5">
+          <div className="mt-2 text-[10px] sm:text-xs space-y-0.5">
             {comparison?.expenseChangePct !== null && comparison?.expenseChangePct !== undefined ? (
-              <div className="flex items-center gap-0.5 font-semibold text-[9.5px] sm:text-[11px]">
+              <div className="flex items-center gap-0.5 font-semibold text-[10px] sm:text-[11px]">
                 <span className={comparison.expenseChangePct <= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}>
                   {comparison.expenseChangePct <= 0 ? `↓${comparison.expenseChangePct}%` : `↑+${comparison.expenseChangePct}%`}
                 </span>
                 <span className="text-slate-400 dark:text-zinc-500 font-normal hidden sm:inline">so với kỳ trước</span>
               </div>
             ) : comparison?.expenseToIncomeRatio !== null && comparison?.expenseToIncomeRatio !== undefined ? (
-              <span className="text-slate-400 dark:text-zinc-500 font-normal text-[9.5px] sm:text-[11px] block">
+              <span className="text-slate-400 dark:text-zinc-500 font-normal text-[10px] sm:text-[11px] block">
                 Tiêu {comparison.expenseToIncomeRatio}% thu
               </span>
             ) : null}
             <p className="text-slate-500 dark:text-zinc-400 font-medium">
               {summary?.expenseCount ?? 0} giao dịch
-            </p>
-          </div>
-        </div>
-
-        {/* Dòng tiền ròng (cho phép hiển thị số âm, chữ viết đầy đủ không viết tắt/dấu 3 chấm) */}
-        <div className={`rounded-2xl shadow-sm border p-2 sm:p-4 sm:p-5 transition-colors flex flex-col justify-between ${
-          (summary?.balance ?? 0) >= 0
-            ? 'bg-blue-600 border-blue-500 dark:bg-blue-600 dark:border-blue-500 text-white shadow-blue-500/10'
-            : 'bg-rose-600 border-rose-500 dark:bg-rose-600 dark:border-rose-500 text-white shadow-rose-500/10'
-        }`}>
-          <div>
-            <div className="flex items-center justify-between mb-1 sm:mb-2 gap-1">
-              <span className="text-[10.5px] xs:text-xs sm:text-sm text-white font-semibold leading-tight">Dòng tiền ròng</span>
-              <div className="w-5 h-5 sm:w-8 sm:h-8 bg-white/20 rounded-md sm:rounded-xl flex items-center justify-center shrink-0">
-                <Wallet className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
-              </div>
-            </div>
-            <p className="text-xs xs:text-sm sm:text-xl md:text-2xl font-bold text-white tracking-tight" title={formatVND(summary?.balance ?? 0)}>
-              {(summary?.balance ?? 0) > 0
-                ? `+${formatVND(summary?.balance ?? 0)}`
-                : formatVND(summary?.balance ?? 0)}
-            </p>
-          </div>
-          
-          <div className="mt-1.5 sm:mt-2 text-[10px] sm:text-xs space-y-0.5 text-white">
-            <p className="font-semibold text-[10px] sm:text-xs text-white/95">
-              {(summary?.balance ?? 0) >= 0 ? 'Thặng dư (+)' : 'Thâm hụt (-)'}
-            </p>
-            <p className="text-[9.5px] sm:text-[11px] text-white/85 font-medium">
-              Tiết kiệm: {savingsRate}%
             </p>
           </div>
         </div>
