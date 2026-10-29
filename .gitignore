@@ -10,3 +10,7 @@ Thumbs.db
 .env
 *.env
 server/.env
+.agent/
+.agents/
+.codex/
+.gemini/
