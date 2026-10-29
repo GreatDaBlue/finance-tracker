@@ -254,24 +254,26 @@ export default function CreditCardManager({ refreshKey, user, onCountChange }: P
     <div className="space-y-4">
       {/* Thẻ Thống kê Dư nợ Thẻ tín dụng */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-        {/* Tổng dư nợ thẻ cần thanh toán */}
-        <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-50/80 to-blue-50/60 dark:from-indigo-950/40 dark:to-blue-950/30 border border-indigo-200/80 dark:border-indigo-900/60 space-y-1 transition-colors shadow-2xs">
-          <div className="flex items-center justify-between text-xs font-semibold text-indigo-900 dark:text-indigo-300 gap-2">
+        {/* Tổng dư nợ thẻ cần thanh toán — Phong cách Titanium Black Card */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-slate-900 via-zinc-900 to-black text-white border border-slate-700/80 shadow-md shadow-black/20 space-y-2 relative overflow-hidden transition-all">
+          <div className="flex items-center justify-between text-xs font-semibold text-slate-300 gap-2 relative z-10">
             <span className="flex items-center gap-1.5 min-w-0">
-              <CreditCardIcon className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-              <span className="truncate">Tổng dư nợ thẻ của {userName}</span>
+              <div className="w-5 h-5 rounded-md bg-amber-400/20 text-amber-300 border border-amber-400/40 flex items-center justify-center shrink-0">
+                <CreditCardIcon className="w-3.5 h-3.5" />
+              </div>
+              <span className="truncate text-slate-200">Tổng dư nợ thẻ của {userName}</span>
             </span>
-            <span className="shrink-0 whitespace-nowrap text-[10.5px] bg-indigo-200/80 dark:bg-indigo-900/80 text-indigo-900 dark:text-indigo-200 px-2.5 py-0.5 rounded-full font-bold">
+            <span className="shrink-0 whitespace-nowrap text-[10.5px] bg-white/10 text-slate-200 border border-white/15 px-2.5 py-0.5 rounded-full font-bold">
               {summary.pendingCount} thẻ còn nợ
             </span>
           </div>
-          <p className="text-2xl font-black text-indigo-700 dark:text-indigo-300 tracking-tight">
+          <p className="text-2xl sm:text-3xl font-black text-white tracking-tight tabular-nums relative z-10">
             {formatVND(summary.totalDebtRemaining)}
           </p>
-          <div className="text-[11px] text-indigo-600/80 dark:text-indigo-400/80 flex items-center justify-between pt-0.5">
-            <span>Đã thanh toán kỳ này: <strong>{formatVND(summary.totalPaid)}</strong></span>
+          <div className="text-[11px] text-slate-400 flex items-center justify-between pt-1 border-t border-slate-800/80 relative z-10">
+            <span>Đã thanh toán kỳ này: <strong className="text-slate-200">{formatVND(summary.totalPaid)}</strong></span>
             {summary.settledCount > 0 && (
-              <span className="text-emerald-600 dark:text-emerald-400 font-medium">✓ {summary.settledCount} thẻ đã trả hết</span>
+              <span className="text-emerald-400 font-medium">✓ {summary.settledCount} thẻ đã trả hết</span>
             )}
           </div>
         </div>
@@ -337,7 +339,7 @@ export default function CreditCardManager({ refreshKey, user, onCountChange }: P
             onClick={() => setFilterStatus('pending')}
             className={`px-3 py-1.5 rounded-lg font-semibold transition-colors ${
               filterStatus === 'pending'
-                ? 'bg-indigo-100 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300'
+                ? 'bg-slate-900 dark:bg-zinc-100 text-white dark:text-slate-900 shadow-xs'
                 : 'text-slate-500 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800'
             }`}
           >
@@ -411,7 +413,7 @@ export default function CreditCardManager({ refreshKey, user, onCountChange }: P
                       <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
                         isSettled
                           ? 'bg-slate-200 dark:bg-zinc-700 text-slate-600 dark:text-zinc-300'
-                          : 'bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-xs'
+                          : 'bg-gradient-to-tr from-slate-900 to-zinc-800 text-amber-400 border border-slate-700/80 shadow-xs'
                       }`}>
                         <CreditCardIcon className="w-4 h-4" />
                       </div>
@@ -458,7 +460,7 @@ export default function CreditCardManager({ refreshKey, user, onCountChange }: P
                     <span className="text-[11px] text-slate-400 dark:text-zinc-400 block font-medium">
                       {isSettled ? 'Dư nợ đã thanh toán hết' : 'Dư nợ cần thanh toán kỳ này:'}
                     </span>
-                    <p className={`text-xl font-black tracking-tight ${
+                    <p className={`text-xl font-black tracking-tight tabular-nums ${
                       isSettled
                         ? 'text-slate-400 dark:text-zinc-500 line-through'
                         : isOverdue
