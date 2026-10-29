@@ -52,11 +52,11 @@ export default function InstallSmartBanner({ onOpenGuide, deferredPrompt }: Prop
       <div className="max-w-7xl mx-auto px-3 py-2 sm:py-2.5 flex items-center justify-between gap-2.5 sm:gap-4">
         {/* LOGO & THÔNG ĐIỆP */}
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-white/20 backdrop-blur-md border border-white/30 flex items-center justify-center p-1 shadow-inner shrink-0">
+          <div className="w-8 h-8 rounded-xl overflow-hidden border border-white/30 shadow-xs shrink-0">
             <img
-              src="/favicon.svg"
+              src="/logo.png"
               alt="Logo"
-              className="w-full h-full object-contain filter drop-shadow-xs"
+              className="w-full h-full object-cover"
             />
           </div>
 

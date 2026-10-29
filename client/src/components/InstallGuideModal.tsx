@@ -83,11 +83,11 @@ export default function InstallGuideModal({
         {/* HEADER MODAL */}
         <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-zinc-800 flex items-start justify-between gap-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-white/15 backdrop-blur-md border border-white/25 flex items-center justify-center p-1.5 shadow-inner shrink-0">
+            <div className="w-12 h-12 rounded-2xl overflow-hidden border border-white/25 shadow-md shrink-0">
               <img
-                src="/favicon.svg"
+                src="/logo.png"
                 alt="Tiền Đâu Rồi Logo"
-                className="w-full h-full object-contain filter drop-shadow-xs"
+                className="w-full h-full object-cover"
               />
             </div>
             <div>

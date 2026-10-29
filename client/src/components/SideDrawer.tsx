@@ -1098,8 +1098,8 @@ export default function SideDrawer({
             className="bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-slate-100 dark:border-zinc-800 w-full max-w-sm p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150 cursor-default text-center"
             onClick={e => e.stopPropagation()}
           >
-            <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center text-3xl font-black mx-auto shadow-lg shadow-blue-500/25">
-              ₫
+            <div className="w-20 h-20 rounded-3xl overflow-hidden mx-auto shadow-xl border border-slate-200 dark:border-zinc-800">
+              <img src="/logo.png" alt="Tiền Đâu Rồi Logo" className="w-full h-full object-cover" />
             </div>
 
             <div>
@@ -1120,11 +1120,11 @@ export default function SideDrawer({
               </div>
               <div className="flex justify-between text-slate-600 dark:text-zinc-300">
                 <span>Phiên bản:</span>
-                <strong className="text-blue-600">v1.2.0</strong>
+                <strong className="text-blue-600">v1.2.5</strong>
               </div>
               <div className="flex justify-between text-slate-600 dark:text-zinc-300">
                 <span>Ngày cập nhật:</span>
-                <strong>27/10/2026</strong>
+                <strong>29/10/2026</strong>
               </div>
               <div className="flex justify-between text-slate-600 dark:text-zinc-300">
                 <span>Cơ sở dữ liệu:</span>

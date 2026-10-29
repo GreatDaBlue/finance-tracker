@@ -233,12 +233,12 @@ export default function HomePage() {
               <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center p-0.5 text-white font-black text-sm sm:text-base shadow-sm group-hover:scale-105 transition-transform overflow-hidden ${
                 currentAnimalAvatar
                   ? `bg-gradient-to-br ${currentAnimalAvatar.bgGradient}`
-                  : 'bg-gradient-to-tr from-blue-600 to-indigo-600 shadow-blue-500/25'
+                  : 'bg-slate-900 dark:bg-zinc-800'
               }`}>
                 {currentAnimalAvatar ? (
                   <AnimalAvatarGraphic avatarId={currentAnimalAvatar.id} className="w-full h-full object-contain filter drop-shadow-xs" />
                 ) : (
-                  <span>₫</span>
+                  <img src="/logo.png" alt="Tiền Đâu Rồi Logo" className="w-full h-full object-cover" />
                 )}
               </div>
               <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-[10px] font-black flex items-center justify-center border-2 border-white dark:border-zinc-900 shadow-xs">

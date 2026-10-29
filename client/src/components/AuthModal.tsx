@@ -53,8 +53,8 @@ export default function AuthModal({ onSuccess }: Props) {
         {/* Header với icon */}
         <div className="bg-gradient-to-br from-blue-600 via-indigo-600 to-indigo-700 p-6 text-white text-center relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-2xl pointer-events-none" />
-          <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center mx-auto mb-3 backdrop-blur-md border border-white/20 shadow-inner">
-            <span className="text-2xl font-black">₫</span>
+          <div className="w-16 h-16 rounded-2xl mx-auto mb-3 border border-white/25 shadow-lg overflow-hidden">
+            <img src="/logo.png" alt="Tiền Đâu Rồi Logo" className="w-full h-full object-cover" />
           </div>
           <h2 className="text-2xl font-black tracking-tight flex items-center justify-center gap-1.5">
             <span>Tiền Đâu Rồi?</span>
