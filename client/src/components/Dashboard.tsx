@@ -10,6 +10,7 @@ interface Props {
   filters: FilterParams;
   user?: User | null;
   onSwitchTab?: (tab: 'list' | 'dashboard' | 'budget' | 'debt') => void;
+  refreshKey?: number;
 }
 
 const COLORS = [
@@ -198,7 +199,7 @@ function getTimePeriodLabel(filters: FilterParams): string {
   return 'Tùy chọn';
 }
 
-export default function Dashboard({ filters, user, onSwitchTab }: Props) {
+export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Props) {
   const [summary, setSummary] = useState<SummaryStats | null>(null);
   const [catStats, setCatStats] = useState<CategoryStat[]>([]);
   const [dateStats, setDateStats] = useState<DateStat[]>([]);
@@ -210,7 +211,7 @@ export default function Dashboard({ filters, user, onSwitchTab }: Props) {
 
   useEffect(() => {
     api.getCreditCards().then(res => setCreditSummary(res.summary)).catch(() => {});
-  }, []);
+  }, [refreshKey]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -227,7 +228,8 @@ export default function Dashboard({ filters, user, onSwitchTab }: Props) {
   }, [showRuleTooltip]);
 
   useEffect(() => {
-    setLoading(true);
+    // Chỉ bật skeleton loading khi chưa có dữ liệu nào trong RAM
+    if (!summary) setLoading(true);
 
     const dateStatsFilters = { ...filters };
     if (chartGroup === 'quarter') {
@@ -250,7 +252,7 @@ export default function Dashboard({ filters, user, onSwitchTab }: Props) {
       setCatStats(c.filter(cat => cat.type === 'expense'));
       setDateStats(d);
     }).finally(() => setLoading(false));
-  }, [filters, chartGroup]);
+  }, [filters, chartGroup, refreshKey]);
 
   if (loading && !summary) {
     return (

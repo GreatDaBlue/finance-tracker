@@ -66,6 +66,20 @@ export default function HomePage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
+  // Theo dõi các tab đã từng mở ít nhất 1 lần để lazy-load và giữ component trong RAM (Keep-Alive)
+  const [visitedTabs, setVisitedTabs] = useState<Record<string, boolean>>({ list: true });
+
+  useEffect(() => {
+    setVisitedTabs(prev => (prev[activeTab] ? prev : { ...prev, [activeTab]: true }));
+    // Khi chuyển sang tab dashboard, kích hoạt nhẹ event resize để Recharts tính toán lại kích thước biểu đồ chuẩn xác
+    if (activeTab === 'dashboard') {
+      const timer = setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+      }, 60);
+      return () => clearTimeout(timer);
+    }
+  }, [activeTab]);
+
   // Lắng nghe sự kiện cài đặt PWA của trình duyệt (Android Chrome, Edge, Chromium)
   useEffect(() => {
     const handleBeforeInstall = (e: Event) => {
@@ -343,12 +357,13 @@ export default function HomePage() {
             )}
 
             {/* Thanh lọc — chỉ hiện ở tab Giao dịch và Tổng quan */}
-            {activeTab !== 'budget' && activeTab !== 'debt' && (
+            {(activeTab === 'list' || activeTab === 'dashboard') && (
               <FilterBar filters={filters} onFiltersChange={f => setFilters(f)} />
             )}
 
-            {/* Nội dung tab */}
-            {activeTab === 'list' ? (
+            {/* Nội dung các tab — Cơ chế Keep-Alive: Lưu vào RAM khi mở lần đầu, chuyển tab 0ms tức thì */}
+            {/* Tab 1: Giao dịch */}
+            <div className={activeTab === 'list' ? 'block' : 'hidden'}>
               <TransactionList
                 transactions={transactions}
                 total={total}
@@ -359,12 +374,39 @@ export default function HomePage() {
                 onUpdated={handleUpdated}
                 onLoadMore={handleLoadMore}
               />
-            ) : activeTab === 'dashboard' ? (
-              <Dashboard filters={filters} user={currentUser} onSwitchTab={setActiveTab} />
-            ) : activeTab === 'budget' ? (
-              <BudgetManager refreshKey={refreshKey} onOpenRecurring={() => setShowRecurring(true)} user={currentUser} />
-            ) : (
-              <DebtManager refreshKey={refreshKey} user={currentUser} />
+            </div>
+
+            {/* Tab 2: Tổng quan & Biểu đồ (Keep-Alive sau khi mở lần đầu) */}
+            {visitedTabs['dashboard'] && (
+              <div className={activeTab === 'dashboard' ? 'block' : 'hidden'}>
+                <Dashboard
+                  filters={filters}
+                  user={currentUser}
+                  onSwitchTab={setActiveTab}
+                  refreshKey={refreshKey}
+                />
+              </div>
+            )}
+
+            {/* Tab 3: Hạn mức ngân sách (Keep-Alive sau khi mở lần đầu) */}
+            {visitedTabs['budget'] && (
+              <div className={activeTab === 'budget' ? 'block' : 'hidden'}>
+                <BudgetManager
+                  refreshKey={refreshKey}
+                  onOpenRecurring={() => setShowRecurring(true)}
+                  user={currentUser}
+                />
+              </div>
+            )}
+
+            {/* Tab 4: Sổ nợ & Thẻ tín dụng (Keep-Alive sau khi mở lần đầu) */}
+            {visitedTabs['debt'] && (
+              <div className={activeTab === 'debt' ? 'block' : 'hidden'}>
+                <DebtManager
+                  refreshKey={refreshKey}
+                  user={currentUser}
+                />
+              </div>
             )}
           </main>
         </div>
