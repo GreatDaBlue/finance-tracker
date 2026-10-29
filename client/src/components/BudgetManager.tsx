@@ -192,17 +192,24 @@ export default function BudgetManager({ refreshKey, onOpenRecurring, user }: Pro
       {loading ? (
         <p className="text-center text-xs text-slate-400 dark:text-zinc-500 py-6">Đang tải dữ liệu ngân sách...</p>
       ) : !data?.budgets || data.budgets.length === 0 ? (
-        <div className="text-center py-6 border border-dashed border-slate-200 dark:border-zinc-700 rounded-xl space-y-2">
-          <Target className="w-8 h-8 text-slate-300 dark:text-zinc-600 mx-auto" />
-          <p className="text-xs text-slate-500 dark:text-zinc-400 font-medium">
-            Chưa có ngân sách nào cho tháng {selectedMonth.split('-').reverse().join('/')}.
-          </p>
+        <div className="text-center py-7 px-4 border border-dashed border-slate-200 dark:border-zinc-700 rounded-2xl space-y-3 bg-slate-50/40 dark:bg-zinc-900/30">
+          <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto shadow-xs">
+            <Target className="w-6 h-6" />
+          </div>
+          <div className="space-y-1 max-w-sm mx-auto">
+            <p className="text-xs sm:text-sm text-slate-700 dark:text-zinc-200 font-bold">
+              Chưa có ngân sách nào cho tháng {selectedMonth.split('-').reverse().join('/')}
+            </p>
+            <p className="text-[11px] text-slate-400 dark:text-zinc-500 leading-relaxed">
+              Đặt hạn mức chi tiêu để kiểm soát tài chính (ví dụ: tổng 8 triệu, ăn uống 3 triệu)
+            </p>
+          </div>
           <button
             type="button"
             onClick={() => setShowAddModal(true)}
-            className="text-xs text-blue-600 dark:text-blue-400 font-semibold hover:underline inline-flex items-center gap-1"
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm shadow-blue-500/20 transition-all active:scale-95 cursor-pointer mx-auto"
           >
-            <Plus className="w-3.5 h-3.5" /> Bấm vào đây để đặt ngân sách (ví dụ: tổng 8 triệu, ăn uống 3 triệu)
+            <Plus className="w-4 h-4" /> Đặt ngân sách ngay
           </button>
         </div>
       ) : (
