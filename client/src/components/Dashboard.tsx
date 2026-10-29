@@ -438,8 +438,10 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
             <div className="relative inline-block" ref={tooltipRef}>
               <button
                 type="button"
-                onClick={() => setShowRuleTooltip(v => !v)}
-                onMouseEnter={() => setShowRuleTooltip(true)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowRuleTooltip(v => !v);
+                }}
                 className="p-1 rounded-full text-slate-400 hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
                 title="Tìm hiểu quy tắc 50/30/20"
                 aria-label="Tìm hiểu quy tắc 50/30/20"
@@ -449,62 +451,78 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
 
               {/* Tooltip Popover giải thích chuẩn vàng 50/30/20 */}
               {showRuleTooltip && (
-                <div className="absolute left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 top-full mt-2 z-50 w-[295px] sm:w-[350px] max-w-[calc(100vw-36px)] p-3.5 sm:p-4 rounded-xl shadow-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 text-left animate-in fade-in zoom-in-95 duration-150">
-                  <div className="space-y-2.5 text-xs text-slate-600 dark:text-zinc-300">
-                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-2">
-                      <span className="font-bold text-slate-800 dark:text-zinc-100 text-xs sm:text-sm">
-                        📐 Chuẩn Vàng 50/30/20 là gì?
-                      </span>
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); setShowRuleTooltip(false); }}
-                        className="text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 p-1 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-800 leading-none text-sm font-bold"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                    
-                    <p className="text-[11px] text-slate-500 dark:text-zinc-400 leading-relaxed">
-                      Quy tắc phân bổ thu nhập kinh điển của trường Đại học Harvard, giúp {userName} cân bằng cuộc sống và tích lũy bền vững:
-                    </p>
+                <>
+                  {/* Backdrop mờ trên mobile để chạm ra ngoài là đóng */}
+                  <div
+                    className="fixed inset-0 z-40 bg-slate-900/40 dark:bg-black/60 sm:hidden backdrop-blur-2xs"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowRuleTooltip(false);
+                    }}
+                  />
 
-                    <div className="space-y-1.5">
-                      <div className="p-2 rounded-lg bg-blue-50/70 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900/50">
-                        <div className="font-semibold text-blue-700 dark:text-blue-300 flex items-center justify-between text-[11px]">
-                          <span>🏠 50% Nhu cầu thiết yếu</span>
-                          <span className="text-[9.5px] bg-blue-100 dark:bg-blue-900/70 text-blue-800 dark:text-blue-200 px-1.5 py-0.5 rounded font-bold">Needs</span>
+                  {/* Panel nội dung: Modal giữa màn hình trên Mobile, Popover góc trái trên Desktop */}
+                  <div
+                    className="fixed sm:absolute z-50 inset-x-3 top-1/2 -translate-y-1/2 sm:inset-x-auto sm:left-0 sm:top-full sm:translate-y-0 sm:mt-2 w-auto sm:w-[360px] max-w-sm sm:max-w-none mx-auto sm:mx-0 p-4 rounded-2xl shadow-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 text-left animate-in fade-in zoom-in-95 duration-150 max-h-[85vh] overflow-y-auto"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <div className="space-y-2.5 text-xs text-slate-600 dark:text-zinc-300">
+                      <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-2">
+                        <span className="font-bold text-slate-800 dark:text-zinc-100 text-xs sm:text-sm">
+                          📐 Chuẩn Vàng 50/30/20 là gì?
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setShowRuleTooltip(false); }}
+                          className="text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 p-1 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-800 leading-none text-sm font-bold cursor-pointer"
+                          title="Đóng"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      
+                      <p className="text-[11px] text-slate-500 dark:text-zinc-400 leading-relaxed">
+                        Quy tắc phân bổ thu nhập kinh điển của trường Đại học Harvard, giúp {userName} cân bằng cuộc sống và tích lũy bền vững:
+                      </p>
+
+                      <div className="space-y-1.5">
+                        <div className="p-2 rounded-lg bg-blue-50/70 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900/50">
+                          <div className="font-semibold text-blue-700 dark:text-blue-300 flex items-center justify-between text-[11px]">
+                            <span>🏠 50% Nhu cầu thiết yếu</span>
+                            <span className="text-[9.5px] bg-blue-100 dark:bg-blue-900/70 text-blue-800 dark:text-blue-200 px-1.5 py-0.5 rounded font-bold">Needs</span>
+                          </div>
+                          <p className="text-[10.5px] text-blue-950/80 dark:text-blue-200/80 mt-0.5">
+                            Tiền nhà, ăn uống cơ bản, điện nước, xăng xe, y tế, học phí, chi phí tối thiểu để duy trì cuộc sống...
+                          </p>
                         </div>
-                        <p className="text-[10.5px] text-blue-950/80 dark:text-blue-200/80 mt-0.5">
-                          Tiền nhà, ăn uống cơ bản, điện nước, xăng xe, y tế, học phí, chi phí tối thiểu để duy trì cuộc sống...
-                        </p>
+
+                        <div className="p-2 rounded-lg bg-amber-50/70 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900/50">
+                          <div className="font-semibold text-amber-700 dark:text-amber-300 flex items-center justify-between text-[11px]">
+                            <span>🎬 30% Mong muốn & Sở thích</span>
+                            <span className="text-[9.5px] bg-amber-100 dark:bg-amber-900/70 text-amber-800 dark:text-amber-200 px-1.5 py-0.5 rounded font-bold">Wants</span>
+                          </div>
+                          <p className="text-[10.5px] text-amber-950/80 dark:text-amber-200/80 mt-0.5">
+                            Mua sắm, ăn ngoài, du lịch, xem phim, cà phê, sở thích cá nhân nâng cao chất lượng sống...
+                          </p>
+                        </div>
+
+                        <div className="p-2 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/50">
+                          <div className="font-semibold text-emerald-700 dark:text-emerald-300 flex items-center justify-between text-[11px]">
+                            <span>💰 20% Tiết kiệm & Tích lũy</span>
+                            <span className="text-[9.5px] bg-emerald-100 dark:bg-emerald-900/70 text-emerald-800 dark:text-emerald-200 px-1.5 py-0.5 rounded font-bold">Savings</span>
+                          </div>
+                          <p className="text-[10.5px] text-emerald-950/80 dark:text-emerald-200/80 mt-0.5">
+                            Quỹ khẩn cấp (3-6 tháng sinh hoạt), gửi tiết kiệm, đầu tư sinh lời và trả nợ gốc (chuẩn tối thiểu).
+                          </p>
+                        </div>
                       </div>
 
-                      <div className="p-2 rounded-lg bg-amber-50/70 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900/50">
-                        <div className="font-semibold text-amber-700 dark:text-amber-300 flex items-center justify-between text-[11px]">
-                          <span>🎬 30% Mong muốn & Sở thích</span>
-                          <span className="text-[9.5px] bg-amber-100 dark:bg-amber-900/70 text-amber-800 dark:text-amber-200 px-1.5 py-0.5 rounded font-bold">Wants</span>
-                        </div>
-                        <p className="text-[10.5px] text-amber-950/80 dark:text-amber-200/80 mt-0.5">
-                          Mua sắm, ăn ngoài, du lịch, xem phim, cà phê, sở thích cá nhân nâng cao chất lượng sống...
-                        </p>
+                      <div className="pt-1.5 border-t border-slate-100 dark:border-zinc-800 text-[10px] text-slate-400 dark:text-zinc-500 italic">
+                        💡 Mốc 20% là chuẩn vàng tối thiểu. Càng tiết kiệm nhiều hơn (35%, 50%, 70%), {userName} càng nhanh chóng đạt Độc Lập Tài Chính (FIRE)!
                       </div>
-
-                      <div className="p-2 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/50">
-                        <div className="font-semibold text-emerald-700 dark:text-emerald-300 flex items-center justify-between text-[11px]">
-                          <span>💰 20% Tiết kiệm & Tích lũy</span>
-                          <span className="text-[9.5px] bg-emerald-100 dark:bg-emerald-900/70 text-emerald-800 dark:text-emerald-200 px-1.5 py-0.5 rounded font-bold">Savings</span>
-                        </div>
-                        <p className="text-[10.5px] text-emerald-950/80 dark:text-emerald-200/80 mt-0.5">
-                          Quỹ khẩn cấp (3-6 tháng sinh hoạt), gửi tiết kiệm, đầu tư sinh lời và trả nợ gốc (chuẩn tối thiểu).
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="pt-1.5 border-t border-slate-100 dark:border-zinc-800 text-[10px] text-slate-400 dark:text-zinc-500 italic">
-                      💡 Mốc 20% là chuẩn vàng tối thiểu. Càng tiết kiệm nhiều hơn (35%, 50%, 70%), {userName} càng nhanh chóng đạt Độc Lập Tài Chính (FIRE)!
                     </div>
                   </div>
-                </div>
+                </>
               )}
             </div>
           </div>
