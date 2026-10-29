@@ -263,34 +263,38 @@ export default function TransactionList({ transactions, total, loading, filters,
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-slate-400 dark:text-zinc-500 mt-0.5 leading-relaxed break-words">
+                      <p className="text-xs text-slate-500 dark:text-zinc-400 font-medium mt-0.5 leading-relaxed break-words">
                         {t.category}{t.note ? ` · ${t.note.replace('[Định kỳ hàng tháng]', '').trim()}` : ''}
                       </p>
                     </div>
 
                     {/* Amount */}
                     <div className="text-right flex-shrink-0">
-                      <p className={`text-sm font-bold tracking-tight ${t.type === 'income' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
+                      <p className={`text-sm sm:text-base font-bold tracking-tight tabular-nums ${t.type === 'income' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
                         {t.type === 'income' ? '+' : '-'}{formatVND(t.amount)}
                       </p>
                     </div>
 
-                    {/* Actions (show on hover / tap) */}
-                    <div className="flex items-center gap-1 opacity-80 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                    {/* Actions (Vùng chạm tối ưu trên Mobile, hover trên Desktop) */}
+                    <div className="flex items-center gap-0.5 sm:gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                       <button
+                        type="button"
                         onClick={() => setEditingId(t.id)}
-                        className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                        className="p-2 sm:p-1.5 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-950/70 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 active:scale-90 transition-all cursor-pointer"
                         title="Chỉnh sửa giao dịch"
+                        aria-label="Chỉnh sửa giao dịch"
                       >
-                        <Pencil className="w-3.5 h-3.5" />
+                        <Pencil className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                       </button>
                       <button
+                        type="button"
                         onClick={() => handleDelete(t.id)}
                         disabled={deletingId === t.id}
-                        className="p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950 text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 transition-colors"
+                        className="p-2 sm:p-1.5 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/70 text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 active:scale-90 transition-all cursor-pointer disabled:opacity-50"
                         title="Xóa giao dịch"
+                        aria-label="Xóa giao dịch"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                       </button>
                     </div>
                   </motion.div>

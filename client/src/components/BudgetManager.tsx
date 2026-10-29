@@ -251,18 +251,19 @@ export default function BudgetManager({ refreshKey, onOpenRecurring, user }: Pro
                     <button
                       type="button"
                       onClick={() => handleDeleteBudget(b.id)}
-                      className="p-1 text-slate-400 dark:text-zinc-500 hover:text-rose-600 dark:hover:text-rose-400 rounded-md hover:bg-white dark:hover:bg-zinc-800 transition-colors"
+                      className="p-2 sm:p-1 text-slate-400 dark:text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-xl hover:bg-white dark:hover:bg-zinc-800 active:scale-90 transition-all cursor-pointer"
                       title="Xóa ngân sách này"
+                      aria-label="Xóa ngân sách này"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                     </button>
                   </div>
                 </div>
 
                 {/* Số tiền: Đã tiêu / Ngân sách */}
-                <div className="flex items-baseline justify-between">
+                <div className="flex items-baseline justify-between tabular-nums">
                   <div className="text-xs">
-                    <span className="text-slate-400 dark:text-zinc-400">Đã tiêu: </span>
+                    <span className="text-slate-400 dark:text-zinc-400 font-medium">Đã tiêu: </span>
                     <span
                       className={`font-bold ${
                         b.status === 'EXCEEDED'

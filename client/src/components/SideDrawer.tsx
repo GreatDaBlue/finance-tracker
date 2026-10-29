@@ -389,7 +389,7 @@ export default function SideDrawer({
                   <h4 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-zinc-100 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors truncate">
                     Quản lý danh mục
                   </h4>
-                  <p className="text-[10px] sm:text-[11px] text-slate-400 dark:text-zinc-500 truncate">
+                  <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-zinc-400 font-medium truncate">
                     Thêm, sửa, xóa danh mục
                   </p>
                 </div>
@@ -411,7 +411,7 @@ export default function SideDrawer({
                   <h4 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-zinc-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors truncate">
                     Sao lưu & Xuất file
                   </h4>
-                  <p className="text-[10px] sm:text-[11px] text-slate-400 dark:text-zinc-500 truncate">
+                  <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-zinc-400 font-medium truncate">
                     Xuất Excel, JSON, Import
                   </p>
                 </div>
@@ -433,7 +433,7 @@ export default function SideDrawer({
                   <h4 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-zinc-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate">
                     Đổi mật khẩu
                   </h4>
-                  <p className="text-[10px] sm:text-[11px] text-slate-400 dark:text-zinc-500 truncate">
+                  <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-zinc-400 font-medium truncate">
                     Tăng cường bảo mật
                   </p>
                 </div>
@@ -464,7 +464,7 @@ export default function SideDrawer({
                       PWA
                     </span>
                   </div>
-                  <p className="text-[10px] sm:text-[11px] text-slate-400 dark:text-zinc-500 truncate">
+                  <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-zinc-400 font-medium truncate">
                     Thêm vào màn hình chính
                   </p>
                 </div>
@@ -486,7 +486,7 @@ export default function SideDrawer({
                   <h4 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-zinc-100 group-hover:text-pink-600 dark:group-hover:text-pink-400 transition-colors truncate">
                     Góp ý & Báo lỗi
                   </h4>
-                  <p className="text-[10px] sm:text-[11px] text-slate-400 dark:text-zinc-500 truncate">
+                  <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-zinc-400 font-medium truncate">
                     Chia sẻ ý kiến phản hồi
                   </p>
                 </div>
@@ -508,7 +508,7 @@ export default function SideDrawer({
                   <h4 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-zinc-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate">
                     Thông tin ứng dụng
                   </h4>
-                  <p className="text-[10px] sm:text-[11px] text-slate-400 dark:text-zinc-500 truncate">
+                  <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-zinc-400 font-medium truncate">
                     Tiền Đâu Rồi? • v1.2.0
                   </p>
                 </div>

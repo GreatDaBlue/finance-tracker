@@ -382,7 +382,7 @@ export default function DebtManager({ refreshKey, user }: Props) {
                   {/* Số tiền nợ còn lại */}
                   <div className="text-right">
                     <div
-                      className={`font-black text-base sm:text-lg tracking-tight ${
+                      className={`font-black text-base sm:text-lg tracking-tight tabular-nums ${
                         isSettled
                           ? 'text-slate-400 dark:text-zinc-500 line-through'
                           : isLend
@@ -394,7 +394,7 @@ export default function DebtManager({ refreshKey, user }: Props) {
                         ? formatVND(d.amount)
                         : (isLend ? `+${formatVND(remaining)}` : `-${formatVND(remaining)}`)}
                     </div>
-                    <span className="text-[10px] text-slate-400 dark:text-zinc-500 block -mt-0.5 font-medium">
+                    <span className="text-[10px] text-slate-500 dark:text-zinc-400 block -mt-0.5 font-medium">
                       {isSettled ? 'Đã tất toán' : 'Số tiền còn lại'}
                     </span>
                   </div>
@@ -494,8 +494,9 @@ export default function DebtManager({ refreshKey, user }: Props) {
                   <button
                     type="button"
                     onClick={() => handleDeleteDebt(d.id)}
-                    className="p-1.5 text-slate-400 dark:text-zinc-500 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors ml-auto"
+                    className="p-2 sm:p-1.5 text-slate-400 dark:text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/50 active:scale-90 transition-all cursor-pointer ml-auto"
                     title="Xóa khoản nợ này"
+                    aria-label="Xóa khoản nợ này"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
