@@ -26,16 +26,19 @@ function homNay(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-type QuickKey = 'today' | 'month' | 'year' | null;
+type QuickKey = 'today' | 'month' | 'quarter' | 'year' | null;
 function detectActiveQuick(filters: FilterParams): QuickKey {
   const today = homNay();
   const y = new Date().getFullYear();
   const m = new Date().getMonth() + 1;
   const firstOfMonth = `${y}-${String(m).padStart(2, '0')}-01`;
+  const qStartMonth = Math.floor((m - 1) / 3) * 3 + 1;
+  const firstOfQuarter = `${y}-${String(qStartMonth).padStart(2, '0')}-01`;
   const firstOfYear = `${y}-01-01`;
 
   if (filters.dateFrom === today && filters.dateTo === today) return 'today';
   if (filters.dateFrom === firstOfMonth && filters.dateTo === today) return 'month';
+  if (filters.dateFrom === firstOfQuarter && filters.dateTo === today) return 'quarter';
   if (filters.dateFrom === firstOfYear && filters.dateTo === today) return 'year';
   return null;
 }
@@ -129,6 +132,9 @@ export default function FilterBar({ filters, onFiltersChange }: Props) {
       onFiltersChange({ ...filters, dateFrom: today, dateTo: today });
     } else if (key === 'month') {
       onFiltersChange({ ...filters, dateFrom: `${y}-${String(m).padStart(2, '0')}-01`, dateTo: today });
+    } else if (key === 'quarter') {
+      const qStartMonth = Math.floor((m - 1) / 3) * 3 + 1;
+      onFiltersChange({ ...filters, dateFrom: `${y}-${String(qStartMonth).padStart(2, '0')}-01`, dateTo: today });
     } else if (key === 'year') {
       onFiltersChange({ ...filters, dateFrom: `${y}-01-01`, dateTo: today });
     }
@@ -424,13 +430,16 @@ export default function FilterBar({ filters, onFiltersChange }: Props) {
       </div>
 
       {/* Dòng 2: Nút chọn nhanh thời gian — Luôn nằm riêng ở dòng dưới */}
-      <div className="pt-2.5 border-t border-slate-100 dark:border-zinc-800 flex items-center gap-2">
+      <div className="pt-2.5 border-t border-slate-100 dark:border-zinc-800 flex items-center gap-2 flex-wrap">
         <span className="text-xs font-medium text-slate-400 dark:text-zinc-500 mr-1">Xem nhanh:</span>
         <button type="button" onClick={() => quickFilter('today')} className={quickCls('today')}>
           Hôm nay
         </button>
         <button type="button" onClick={() => quickFilter('month')} className={quickCls('month')}>
           Tháng này
+        </button>
+        <button type="button" onClick={() => quickFilter('quarter')} className={quickCls('quarter')}>
+          Quý này
         </button>
         <button type="button" onClick={() => quickFilter('year')} className={quickCls('year')}>
           Năm nay

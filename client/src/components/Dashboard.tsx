@@ -164,6 +164,14 @@ function getTimePeriodLabel(filters: FilterParams): string {
     return 'Tháng này';
   }
 
+  // Kiểm tra Quý này (từ ngày 01 của quý đến hôm nay)
+  const curQuarter = Math.floor((curMonth - 1) / 3) + 1;
+  const qStartMonth = (curQuarter - 1) * 3 + 1;
+  const firstOfCurQuarter = `${curYear}-${pad(qStartMonth)}-01`;
+  if (dateFrom === firstOfCurQuarter && (dateTo === todayStr || dateTo?.startsWith(`${curYear}-`))) {
+    return `Quý ${curQuarter}`;
+  }
+
   // Kiểm tra Năm nay
   if (dateFrom === firstOfCurYear && (dateTo === todayStr || dateTo === `${curYear}-12-31`)) {
     return 'Năm nay';
@@ -199,7 +207,31 @@ function getTimePeriodLabel(filters: FilterParams): string {
   return 'Tùy chọn';
 }
 
+export type DashboardQuickKey = 'today' | 'month' | 'quarter' | 'year';
+
+export function getDashboardPeriodRange(key: DashboardQuickKey): { dateFrom: string; dateTo: string } {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const y = now.getFullYear();
+  const m = now.getMonth(); // 0-11
+
+  if (key === 'today') {
+    return { dateFrom: today, dateTo: today };
+  }
+  if (key === 'month') {
+    return { dateFrom: `${y}-${pad(m + 1)}-01`, dateTo: today };
+  }
+  if (key === 'quarter') {
+    const qStartMonth = Math.floor(m / 3) * 3 + 1; // 1, 4, 7, 10
+    return { dateFrom: `${y}-${pad(qStartMonth)}-01`, dateTo: today };
+  }
+  // year
+  return { dateFrom: `${y}-01-01`, dateTo: today };
+}
+
 export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Props) {
+  const [quickPeriod, setQuickPeriod] = useState<DashboardQuickKey>('month');
   const [summary, setSummary] = useState<SummaryStats | null>(null);
   const [catStats, setCatStats] = useState<CategoryStat[]>([]);
   const [dateStats, setDateStats] = useState<DateStat[]>([]);
@@ -227,14 +259,22 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
     };
   }, [showRuleTooltip]);
 
+  const activePeriodRange = getDashboardPeriodRange(quickPeriod);
+
   useEffect(() => {
     // Chỉ bật skeleton loading khi chưa có dữ liệu nào trong RAM
     if (!summary) setLoading(true);
 
-    const dateStatsFilters = { ...filters };
+    const activeFilters: FilterParams = {
+      ...filters,
+      dateFrom: activePeriodRange.dateFrom,
+      dateTo: activePeriodRange.dateTo
+    };
+
+    const dateStatsFilters = { ...activeFilters };
     if (chartGroup === 'quarter') {
       const curYear = new Date().getFullYear();
-      if (!filters.dateFrom || (filters.dateFrom.startsWith(`${curYear}-`) && (!filters.dateTo || filters.dateTo.startsWith(`${curYear}-`)))) {
+      if (!activeFilters.dateFrom || (activeFilters.dateFrom.startsWith(`${curYear}-`) && (!activeFilters.dateTo || activeFilters.dateTo.startsWith(`${curYear}-`)))) {
         dateStatsFilters.dateFrom = `${curYear}-01-01`;
         dateStatsFilters.dateTo = `${curYear}-12-31`;
       }
@@ -244,15 +284,15 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
     }
 
     Promise.all([
-      api.getSummary(filters),
-      api.getCategoryStats({ ...filters, type: 'expense' }),
+      api.getSummary(activeFilters),
+      api.getCategoryStats({ ...activeFilters, type: 'expense' }),
       api.getDateStats({ ...dateStatsFilters, group: chartGroup })
     ]).then(([s, c, d]) => {
       setSummary(s);
       setCatStats(c.filter(cat => cat.type === 'expense'));
       setDateStats(d);
     }).finally(() => setLoading(false));
-  }, [filters, chartGroup, refreshKey]);
+  }, [quickPeriod, chartGroup, refreshKey]);
 
   if (loading && !summary) {
     return (
@@ -270,10 +310,70 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
   const comparison = summary?.comparison;
   const savingsRate = comparison?.savingsRate ?? (summary && summary.totalIncome > 0 ? Math.round(((summary.balance) / summary.totalIncome) * 1000) / 10 : 0);
   const savingsTier = getSavingsTier(savingsRate, userName);
-  const timePeriodLabel = getTimePeriodLabel(filters);
+  const timePeriodLabel = getTimePeriodLabel(activePeriodRange);
 
   return (
     <div className="space-y-4">
+      {/* Nút Xem nhanh chu kỳ thời gian cho Tab Tổng quan (Hôm nay, Tháng này, Quý này, Năm nay) */}
+      <div className="flex items-center gap-2 p-2.5 sm:p-3 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-100 dark:border-zinc-800 shadow-2xs flex-wrap transition-colors">
+        <span className="text-xs font-medium text-slate-400 dark:text-zinc-500 mr-1">Xem nhanh:</span>
+        <button
+          type="button"
+          onClick={() => {
+            setQuickPeriod('today');
+            setChartGroup('day');
+          }}
+          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border ${
+            quickPeriod === 'today'
+              ? 'bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-500/20'
+              : 'border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-700'
+          }`}
+        >
+          Hôm nay
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setQuickPeriod('month');
+            setChartGroup('month');
+          }}
+          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border ${
+            quickPeriod === 'month'
+              ? 'bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-500/20'
+              : 'border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-700'
+          }`}
+        >
+          Tháng này
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setQuickPeriod('quarter');
+            setChartGroup('month');
+          }}
+          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border ${
+            quickPeriod === 'quarter'
+              ? 'bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-500/20'
+              : 'border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-700'
+          }`}
+        >
+          Quý này
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setQuickPeriod('year');
+            setChartGroup('month');
+          }}
+          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border ${
+            quickPeriod === 'year'
+              ? 'bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-500/20'
+              : 'border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-700'
+          }`}
+        >
+          Năm nay
+        </button>
+      </div>
       {/* Banner Cảnh báo Thẻ tín dụng sắp đến hạn / quá hạn */}
       {creditSummary && (creditSummary.overdueCount > 0 || creditSummary.dueSoonCount > 0) && (
         <div className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 text-xs shadow-2xs transition-all ${
