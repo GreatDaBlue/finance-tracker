@@ -1,84 +1,25 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { api } from '../lib/api';
 import {
-  parseSmartInput,
-  parseAmountInput,
-  parseDateFromVietnameseText,
-  guessCategoryAndType,
-  cleanDescriptionText,
-  formatAmountDisplay
+  parseBatchTransactions,
+  formatAmountDisplay,
+  type BatchParsedRow
 } from '../lib/smartParser';
-import { Upload, X, Check, AlertCircle, FileText, ClipboardList } from 'lucide-react';
+import { Upload, X, Check, AlertCircle, FileText, ClipboardList, Sparkles } from 'lucide-react';
 
 interface Props {
   onImported: () => void;
   onClose: () => void;
 }
 
-interface PreviewRow {
-  date: string;
-  type: 'income' | 'expense';
-  amount: number;
-  description: string;
-  category: string;
-  note: string;
-  valid: boolean;
-  error?: string;
-}
-
-// Tách các cột phân cách bởi dấu phẩy, tab hoặc chấm phẩy
-function parseDelimitedLine(line: string): string[] {
-  let delimiter = ',';
-  if (line.includes('\t')) delimiter = '\t';
-  else if (line.includes(';') && !line.includes(',')) delimiter = ';';
-
-  if (delimiter === '\t' || delimiter === ';') {
-    return line.split(delimiter).map(s => s.trim().replace(/^"|"$/g, ''));
-  }
-
-  // Parse CSV có nháy kép
-  const result: string[] = [];
-  let current = '';
-  let inQuote = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') inQuote = !inQuote;
-    else if (ch === ',' && !inQuote) {
-      result.push(current.trim().replace(/^"|"$/g, ''));
-      current = '';
-    } else {
-      current += ch;
-    }
-  }
-  result.push(current.trim().replace(/^"|"$/g, ''));
-  return result;
-}
-
-function parseExplicitDate(raw: string): string | null {
-  raw = raw.trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
-  const m1 = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-  if (m1) return `${m1[3]}-${m1[2].padStart(2, '0')}-${m1[1].padStart(2, '0')}`;
-  const m2 = raw.match(/^(\d{1,2})[\/\-](\d{1,2})$/);
-  if (m2) {
-    const y = new Date().getFullYear();
-    return `${y}-${m2[2].padStart(2, '0')}-${m2[1].padStart(2, '0')}`;
-  }
-  return null;
-}
-
-function parseExplicitType(raw: string): 'income' | 'expense' | null {
-  const s = raw.toLowerCase().trim();
-  if (['thu', 'income', 'thu nhập', 'in', '+'].includes(s)) return 'income';
-  if (['chi', 'expense', 'chi tiêu', 'out', '-'].includes(s)) return 'expense';
-  return null;
-}
+type PreviewRow = BatchParsedRow;
 
 export default function ImportModal({ onImported, onClose }: Props) {
   const [tab, setTab] = useState<'file' | 'text'>('file');
   const [rows, setRows] = useState<PreviewRow[]>([]);
   const [fileName, setFileName] = useState('');
   const [rawText, setRawText] = useState('');
+  const [directiveSummary, setDirectiveSummary] = useState<string | undefined>();
   const [importing, setImporting] = useState(false);
   const [done, setDone] = useState(false);
   const [importedCount, setImportedCount] = useState(0);
@@ -92,141 +33,21 @@ export default function ImportModal({ onImported, onClose }: Props) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
-  // Xử lý chuỗi văn bản (từ file hoặc từ ô dán trực tiếp)
+  // Xử lý chuỗi văn bản thông minh (từ file CSV/TXT hoặc từ ô dán trực tiếp)
   function processContent(content: string, sourceName = '') {
     if (sourceName) setFileName(sourceName);
     setDone(false);
 
-    const lines = content.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-    if (!lines.length) {
+    if (!content.trim()) {
       setRows([]);
+      setDirectiveSummary(undefined);
       return;
     }
 
     const today = new Date().toISOString().split('T')[0];
-    const firstLineCols = parseDelimitedLine(lines[0]);
-    const isTableLike =
-      lines[0].toLowerCase().includes('ngày') ||
-      lines[0].toLowerCase().includes('loại') ||
-      lines[0].toLowerCase().includes('số tiền') ||
-      lines[0].toLowerCase().includes('amount') ||
-      (firstLineCols.length >= 3 && lines.length > 1);
-
-    let parsed: PreviewRow[] = [];
-
-    if (isTableLike) {
-      // ── Định dạng bảng (CSV, TSV, bảng Excel) ──────────────────────────
-      const headers = firstLineCols.map(h =>
-        h.toLowerCase()
-          .replace('ngày', 'date')
-          .replace('loại', 'type')
-          .replace('số tiền', 'amount')
-          .replace('mô tả', 'description')
-          .replace('danh mục', 'category')
-          .replace('ghi chú', 'note')
-      );
-
-      const hasHeader =
-        headers.includes('date') ||
-        headers.includes('amount') ||
-        headers.includes('description');
-
-      const dataLines = hasHeader ? lines.slice(1) : lines;
-
-      parsed = dataLines.map((line, idx) => {
-        const cols = parseDelimitedLine(line);
-        if (cols.length < 2) return null;
-
-        let dateStr = '';
-        let typeStr = '';
-        let amountStr = '';
-        let descStr = '';
-        let catStr = '';
-        let noteStr = '';
-
-        if (hasHeader) {
-          const get = (...keys: string[]) => {
-            for (const k of keys) {
-              const i = headers.indexOf(k);
-              if (i >= 0 && cols[i]) return cols[i];
-            }
-            return '';
-          };
-          dateStr = get('date');
-          typeStr = get('type');
-          amountStr = get('amount', 'tiền');
-          descStr = get('description', 'desc', 'mota');
-          catStr = get('category', 'danhmuc');
-          noteStr = get('note', 'ghichu');
-        } else {
-          // Đoán theo thứ tự cột: ngày, loại, tiền, mô tả, danh mục, ghi chú
-          if (parseExplicitDate(cols[0])) {
-            dateStr = cols[0];
-            typeStr = cols[1];
-            amountStr = cols[2];
-            descStr = cols[3] || '';
-            catStr = cols[4] || '';
-            noteStr = cols[5] || '';
-          } else {
-            // Thứ tự: mô tả, tiền, loại, ngày
-            descStr = cols[0];
-            amountStr = cols[1];
-            typeStr = cols[2] || '';
-            dateStr = cols[3] || '';
-          }
-        }
-
-        const amount = parseAmountInput(amountStr || '0');
-        const desc = cleanDescriptionText(descStr || cols[0] || `Giao dịch ${idx + 1}`);
-        const guessed = guessCategoryAndType(desc);
-        const type = parseExplicitType(typeStr) || guessed.type;
-        const category = catStr || guessed.category;
-        const date = parseExplicitDate(dateStr) || today;
-
-        const errors: string[] = [];
-        if (!amount || amount <= 0) errors.push('Số tiền chưa đúng');
-        if (!desc) errors.push('Thiếu mô tả');
-
-        return {
-          date,
-          type,
-          amount,
-          description: desc,
-          category,
-          note: noteStr,
-          valid: errors.length === 0,
-          error: errors.join(', ')
-        };
-      }).filter(Boolean) as PreviewRow[];
-    } else {
-      // ── Định dạng câu tự nhiên (file .txt hoặc dán danh sách ghi chú) ──
-      // Ví dụ: "22/10 ăn trưa 20k (ăn với mẹ)"
-      parsed = lines.map(line => {
-        const smart = parseSmartInput(line);
-        const dateParsed = parseDateFromVietnameseText(smart.description);
-        const guessed = guessCategoryAndType(line);
-
-        const desc = cleanDescriptionText(dateParsed.cleanText || smart.description || line);
-        const amount = smart.amount || 0;
-
-        const errors: string[] = [];
-        if (!amount || amount <= 0) errors.push('Không nhận diện được số tiền');
-        if (!desc) errors.push('Thiếu mô tả');
-
-        return {
-          date: dateParsed.date || today,
-          type: guessed.type,
-          amount,
-          description: desc,
-          category: guessed.category,
-          note: smart.note,
-          valid: errors.length === 0,
-          error: errors.join(', ')
-        };
-      });
-    }
-
+    const { rows: parsed, directiveSummary: detected } = parseBatchTransactions(content, today);
     setRows(parsed);
+    setDirectiveSummary(detected);
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -354,26 +175,35 @@ export default function ImportModal({ onImported, onClose }: Props) {
                 Dán danh sách thu chi (mỗi giao dịch 1 dòng):
               </label>
               <textarea
-                rows={5}
+                rows={6}
                 value={rawText}
                 onChange={e => {
                   setRawText(e.target.value);
                   processContent(e.target.value, 'Văn bản dán trực tiếp');
                 }}
-                placeholder={"22/10 ăn trưa 20k (ăn với mẹ)\nhôm qua grab 45k\ntiền lương 15tr (tháng 10)\n20/10 mua thuốc 85k"}
-                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs font-mono text-slate-800 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder={"Đây là dữ liệu chi tháng 8\n01/08/2026 nhận tiền hoàn techcombank 100k\n02/08 ăn phở bò 40k\n03/08 - đổ xăng - 50k\n05 tiền điện nước 650k"}
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs font-mono text-slate-800 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 leading-relaxed"
               />
             </div>
           )}
 
           {/* Hướng dẫn định dạng ví dụ */}
-          <div className="bg-slate-50 dark:bg-zinc-800/60 rounded-xl p-3 border border-slate-100 dark:border-zinc-800 text-xs text-slate-500 dark:text-zinc-400 space-y-1">
-            <p className="font-semibold text-slate-600 dark:text-zinc-300 flex items-center gap-1.5">
-              💡 Hỗ trợ cả 2 định dạng:
+          <div className="bg-slate-50 dark:bg-zinc-800/60 rounded-xl p-3 border border-slate-100 dark:border-zinc-800 text-xs text-slate-500 dark:text-zinc-400 space-y-1.5">
+            <p className="font-semibold text-slate-700 dark:text-zinc-200 flex items-center gap-1.5">
+              💡 Trợ lý AI tự động đọc hiểu thông minh:
             </p>
-            <p>• <b>File .txt câu tự nhiên:</b> <code className="text-blue-600 dark:text-blue-400">22/10 ăn trưa 20k (ăn với mẹ)</code>, <code className="text-blue-600 dark:text-blue-400">hôm qua grab 45k</code></p>
-            <p>• <b>File .csv dạng bảng:</b> <code className="text-slate-600 dark:text-zinc-400">Ngày,Loại,Số tiền,Mô tả,Danh mục,Ghi chú</code></p>
+            <p>• <b>Chỉ thị ngữ cảnh:</b> Ghi dòng đầu như <code className="text-blue-600 dark:text-blue-400 font-semibold">Đây là dữ liệu chi tháng 8</code> hoặc <code className="text-emerald-600 dark:text-emerald-400 font-semibold">Đây là dữ liệu thu tháng 8</code> — toàn bộ các dòng dưới sẽ tự động được gán là Chi / Thu theo đúng tháng!</p>
+            <p>• <b>Tự nhận diện khoản thu:</b> Các dòng có chữ <code className="text-amber-600 dark:text-amber-400 font-semibold">nhận tiền</code>, <code className="text-amber-600 dark:text-amber-400 font-semibold">hoàn tiền</code>, <code className="text-amber-600 dark:text-amber-400 font-semibold">tiền hoàn</code>, <code className="text-amber-600 dark:text-amber-400 font-semibold">lương</code>, <code className="text-amber-600 dark:text-amber-400 font-semibold">thưởng</code>... tự động là <b>Khoản Thu</b>.</p>
+            <p>• <b>Định dạng linh hoạt:</b> Hỗ trợ cả câu tự nhiên, cách nhau bằng gạch nối <code className="text-slate-600 dark:text-zinc-300">01/08 - ăn trưa - 35k</code> hoặc file Excel / CSV.</p>
           </div>
+
+          {/* Huy hiệu thông báo nhận diện ngữ cảnh */}
+          {directiveSummary && (
+            <div className="flex items-center gap-2 p-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/50 text-blue-700 dark:text-blue-300 text-xs font-medium animate-in fade-in">
+              <Sparkles className="w-4 h-4 text-blue-500 shrink-0" />
+              <span>Đã nhận diện ngữ cảnh: <strong>{directiveSummary}</strong></span>
+            </div>
+          )}
 
           {/* Xem trước bảng dữ liệu đã nhận diện */}
           {rows.length > 0 && !done && (

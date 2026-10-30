@@ -450,7 +450,7 @@ export function guessCategoryAndType(text: string): { type: 'income' | 'expense'
   }
 
   // 2. Nhận diện các khoản thu nhập rõ ràng khác
-  const hasDirectIncomeWord = matchViWords(lower, 'lương|salary|thưởng|bonus|thu nhập|cổ tức|lãi|lãi suất|freelance|nhận tiền|tiền vào|được tặng|lì xì|trúng thưởng|hoàn tiền|thu nợ|đòi nợ|\\+');
+  const hasDirectIncomeWord = matchViWords(lower, 'lương|salary|thưởng|bonus|thu nhập|cổ tức|lãi|lãi suất|freelance|nhận tiền|tiền vào|được tặng|lì xì|trúng thưởng|hoàn tiền|tiền hoàn|hoàn lại|hoàn trả|cashback|nhận hoàn|tiền về|ting ting|thu nợ|đòi nợ|\\+');
   const isSelling = matchViWords(lower, 'bán|thanh lý|sang nhượng') && !matchViWords(lower, 'mua|quán|tiệm|chỗ|hàng');
   const isReceiving = matchViWords(lower, 'nhận|kiếm được|thu được') && !matchViWords(lower, 'nhận phòng|nhận hàng');
 
@@ -625,6 +625,67 @@ export interface ParsedTransactionItem {
   person?: string;
 }
 
+export interface HeaderDirectiveResult {
+  isHeader: boolean;
+  isDirective?: boolean;
+  isColumnHeader?: boolean;
+  isSummary?: boolean;
+  type?: 'income' | 'expense';
+  month?: number;
+  year?: number;
+  text?: string;
+}
+
+/**
+ * Nhận diện các dòng chỉ thị ngữ cảnh hoặc dòng tiêu đề bảng / tổng kết:
+ * - "Đây là dữ liệu chi tháng 8", "Dữ liệu thu tháng 8/2026", "Khoản chi:", "Bảng chi tiêu cá nhân"
+ * - "Ngày - Tên chi tiêu - Số tiền", "STT, Ngày, Mô tả, Số tiền"
+ * - "Tổng cộng: 1.500.000đ"
+ */
+export function detectHeaderDirective(line: string): HeaderDirectiveResult | null {
+  const t = line.trim();
+  if (!t) return null;
+
+  // 1. Dòng tiêu đề cột bảng: 'Ngày - Tên chi tiêu - Số tiền', 'STT, Ngày, Mô tả, Số tiền', v.v.
+  const isTableColHeader =
+    /^(?:stt|tt)[\s,;\t|–\-]+(?:ngày|date)/i.test(t) ||
+    /^(?:stt|tt|ngày|date)[\s,;\t|–\-]+(?:mô\s+tả|nội\s+dung|tên|loại|chi\s+tiết|danh\s+mục)/i.test(t) ||
+    /^(?:ngày|date)[\s,;\t|–\-]+(?:loại|số\s+tiền|tiền|amount)/i.test(t) ||
+    /^(?:mô\s+tả|nội\s+dung|tên\s+chi\s+tiêu)[\s,;\t|–\-]+(?:số\s+tiền|tiền|amount)/i.test(t);
+  if (isTableColHeader) {
+    return { isHeader: true, isColumnHeader: true, text: t };
+  }
+
+  // 2. Dòng tổng cộng / thống kê: 'Tổng cộng: 1.500.000', 'Tổng chi: ...'
+  if (/^tổng\s*(?:cộng|chi|thu)?[:\s]/i.test(t)) {
+    return { isHeader: true, isSummary: true, text: t };
+  }
+
+  // 3. Tiêu đề chỉ thị Thu / Chi và Tháng / Năm:
+  // Ví dụ: 'Đây là dữ liệu chi tháng 8', 'Bảng chi tiêu tháng 8/2026', 'Khoản thu tháng 8:', 'Chi tiêu tháng 8'
+  const directiveRx = /^(?:(?:\d+[\.\)\-:]\s*)?(?:đây\s+là\s+)?(?:dữ\s+liệu|danh\s+sách|bảng|các\s+khoản|khoản|phần)?\s*)?(chi\s+tiêu|chi|thu\s+nhập|thu|tiền\s+vào|tiền\s+ra)(?:\s+(?:cá\s+nhân|gia\s+đình|sinh\s+hoạt))?(?:\s+(?:tháng|thg)\s*(\d{1,2}))?(?:\s*(?:năm|\/|-)\s*(\d{4}))?[:\s]*$/iu;
+  const m = t.match(directiveRx);
+  if (m) {
+    const rawType = m[1].toLowerCase();
+    const isIncome = rawType.includes('thu') || rawType.includes('tiền vào');
+    const isExpense = rawType.includes('chi') || rawType.includes('tiền ra');
+    const type = isIncome ? 'income' : (isExpense ? 'expense' : undefined);
+    const month = m[2] ? parseInt(m[2], 10) : undefined;
+    const year = m[3] ? parseInt(m[3], 10) : undefined;
+    return { isHeader: true, isDirective: true, type, month, year, text: t };
+  }
+
+  // 4. Các dòng đề mục chung: '2. Bảng chi tiêu cá nhân', '1. Khoản thu', '2. Khoản chi'
+  const sectionRx = /^(?:\d+[\.\)\-:]\s*)?(?:bảng|danh\s+sách|mục)\s+(chi\s+tiêu|thu\s+nhập|chi|thu)(?:\s+cá\s+nhân)?[:\s]*$/iu;
+  const mSec = t.match(sectionRx);
+  if (mSec) {
+    const isIncome = mSec[1].toLowerCase().includes('thu');
+    return { isHeader: true, isDirective: true, type: isIncome ? 'income' : 'expense', text: t };
+  }
+
+  return null;
+}
+
 /**
  * Đọc hiểu câu nhập kép / nhiều giao dịch trên cùng 1 dòng
  * Ví dụ: "nhận thưởng 1tr, mời Đạt đi ăn 500k, đổ xăng 100k, bán máy tính đc 1tr"
@@ -642,14 +703,10 @@ export function parseMultiSmartInput(rawText: string, defaultDate: string = new 
   const clauseRegex = /(?:[\r\n;]+|(?<!\d),(?!\d)|\s+(?:và|rồi|\+)\s+)/i;
   const rawClauses = protectedText.split(clauseRegex);
 
-  // 3. Kiểm tra ngày chung nếu người dùng mở đầu bằng ngày (ví dụ: "hôm qua: nhận thưởng 1tr, cafe 30k")
   let currentContextDate = defaultDate;
-  if (rawClauses.length > 0) {
-    const firstClauseDate = parseDateFromVietnameseText(rawClauses[0]);
-    if (firstClauseDate.hasExplicitDate && firstClauseDate.date) {
-      currentContextDate = firstClauseDate.date;
-    }
-  }
+  let currentContextType: 'income' | 'expense' | null = null;
+  let currentContextMonth: number | null = null;
+  let currentContextYear: number | null = null;
 
   const items: ParsedTransactionItem[] = [];
 
@@ -664,12 +721,27 @@ export function parseMultiSmartInput(rawText: string, defaultDate: string = new 
     clause = clause.replace(/^[\-\*\+•:\u2013\u2014\s]+/, '').trim();
     if (!clause) continue;
 
+    // Kiểm tra dòng chỉ thị tiêu đề (ví dụ "Đây là dữ liệu chi tháng 8")
+    const headerCheck = detectHeaderDirective(clause);
+    if (headerCheck) {
+      if (headerCheck.isDirective) {
+        if (headerCheck.type) currentContextType = headerCheck.type;
+        if (headerCheck.month) {
+          currentContextMonth = headerCheck.month;
+          const y = headerCheck.year || new Date().getFullYear();
+          currentContextYear = y;
+          currentContextDate = `${y}-${String(headerCheck.month).padStart(2, '0')}-01`;
+        }
+      }
+      continue;
+    }
+
     const parsed = parseSmartInput(clause);
     const dCheck = parseDateFromVietnameseText(clause);
 
     // Mệnh đề không chứa số tiền:
     // Nếu là từ chỉ ngày (ví dụ "Hôm qua:", "20/10:"), cập nhật ngày ngữ cảnh cho các dòng sau.
-    // Các dòng không có tiền (tiêu đề bảng, ghi chú, STT, v.v.) ĐỀU BỊ BỎ QUA HOÀN TOÀN (không tạo giao dịch 0đ).
+    // Các dòng không có tiền ĐỀU BỊ BỎ QUA (không tạo giao dịch 0đ).
     if (parsed.amount === null || parsed.amount <= 0) {
       if (dCheck.hasExplicitDate && dCheck.date) {
         currentContextDate = dCheck.date;
@@ -681,12 +753,24 @@ export function parseMultiSmartInput(rawText: string, defaultDate: string = new 
     let itemDate = currentContextDate;
     let desc = parsed.description || clause;
 
-    // Kiểm tra xem mệnh đề có mốc thời gian riêng không (ví dụ "nay ăn sáng 20k", "hôm 20-10 ăn tối 40k")
+    // Kiểm tra xem mệnh đề có mốc thời gian riêng không (ví dụ "01/08/2026 nhận tiền hoàn...", "nay ăn sáng 20k")
     const clauseDate = parseDateFromVietnameseText(desc || clause);
     if (clauseDate.hasExplicitDate && clauseDate.date) {
       itemDate = clauseDate.date;
       currentContextDate = clauseDate.date; // Cập nhật ngày cho các mệnh đề sau
       desc = clauseDate.cleanText;
+    } else if (currentContextMonth) {
+      // Nhận diện ngày chỉ ghi số '01', '05', 'ngày 5' khi đã có context tháng
+      const dayM = desc.match(/^(?:(?:ngày|hôm|vào)\s+)?(\d{1,2})(?:\s+|$|[-–—:])/i);
+      if (dayM) {
+        const d = parseInt(dayM[1], 10);
+        if (d >= 1 && d <= 31) {
+          const y = currentContextYear || new Date().getFullYear();
+          itemDate = `${y}-${String(currentContextMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+          currentContextDate = itemDate;
+          desc = desc.replace(dayM[0], ' ').trim();
+        }
+      }
     }
 
     desc = cleanDescriptionText(desc);
@@ -710,11 +794,22 @@ export function parseMultiSmartInput(rawText: string, defaultDate: string = new 
       });
     } else {
       const guessed = guessCategoryAndType(desc || clause);
+      // Ưu tiên: nếu mô tả có từ nhận tiền / hoàn tiền / lương / thưởng thì luôn là income
+      const lowerDesc = desc.toLowerCase();
+      const hasStrongIncome = matchViWords(lowerDesc, 'lương|salary|thưởng|bonus|thu nhập|cổ tức|lãi|lãi suất|freelance|nhận tiền|tiền vào|được tặng|lì xì|trúng thưởng|hoàn tiền|tiền hoàn|hoàn lại|hoàn trả|cashback|thu nợ|đòi nợ|nhận');
+
+      let finalType: 'income' | 'expense' = guessed.type;
+      if (hasStrongIncome) {
+        finalType = 'income';
+      } else if (currentContextType) {
+        finalType = currentContextType;
+      }
+
       items.push({
         id: `${Date.now()}-${i}-${Math.random().toString(36).substring(2, 7)}`,
-        type: guessed.type,
+        type: finalType,
         amount: parsed.amount,
-        description: desc || (guessed.type === 'income' ? 'Khoản thu' : 'Khoản chi'),
+        description: desc || (finalType === 'income' ? 'Khoản thu' : 'Khoản chi'),
         category: guessed.category,
         note: parsed.note || '',
         date: itemDate,
@@ -724,4 +819,228 @@ export function parseMultiSmartInput(rawText: string, defaultDate: string = new 
   }
 
   return items;
+}
+
+export interface BatchParsedRow {
+  date: string;
+  type: 'income' | 'expense';
+  amount: number;
+  description: string;
+  category: string;
+  note: string;
+  valid: boolean;
+  error?: string;
+  rawText?: string;
+}
+
+export interface BatchParseResult {
+  rows: BatchParsedRow[];
+  directiveSummary?: string;
+}
+
+function parseExplicitDateWithCtx(raw: string, ctx: { contextMonth: number | null; contextYear: number | null }): string | null {
+  if (!raw) return null;
+  const t = raw.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+  const m1 = t.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/);
+  if (m1) return `${m1[3]}-${m1[2].padStart(2, '0')}-${m1[1].padStart(2, '0')}`;
+  const m2 = t.match(/^(\d{1,2})[\/\-](\d{1,2})$/);
+  if (m2) {
+    const y = ctx.contextYear || new Date().getFullYear();
+    return `${y}-${m2[2].padStart(2, '0')}-${m2[1].padStart(2, '0')}`;
+  }
+  return null;
+}
+
+function parseExplicitTypeCell(raw: string): 'income' | 'expense' | null {
+  if (!raw) return null;
+  const s = raw.toLowerCase().trim();
+  if (['thu', 'income', 'thu nhập', 'in', '+', 'tiền vào', 'nhận'].includes(s)) return 'income';
+  if (['chi', 'expense', 'chi tiêu', 'out', '-', 'tiền ra'].includes(s)) return 'expense';
+  return null;
+}
+
+function parsePartAmountCell(raw: string): number | null {
+  if (!raw) return null;
+  const t = raw.trim();
+  const mK = t.match(/^(\d+(?:[.,]\d+)?)\s*(?:k|nghìn|ngàn)$/i);
+  if (mK) return parseFloat(mK[1].replace(',', '.')) * 1000;
+  const mTr = t.match(/^(\d+(?:[.,]\d+)?)\s*(?:tr|triệu|m|củ)$/i);
+  if (mTr) return parseFloat(mTr[1].replace(',', '.')) * 1000000;
+  const mLit = t.match(/^(\d+(?:[.,]\d+)?)\s*lít$/i);
+  if (mLit) return parseFloat(mLit[1].replace(',', '.')) * 100000;
+  const digits = t.replace(/\./g, '').replace(/,/g, '').replace(/[^\d]/g, '');
+  if (/^\d+$/.test(digits) && parseInt(digits, 10) > 0) return parseInt(digits, 10);
+  return null;
+}
+
+/**
+ * Bộ đọc hàng loạt thông minh hỗ trợ:
+ * - File CSV / TSV / Bảng copy từ Excel
+ * - Danh sách văn bản dán trực tiếp theo câu tự nhiên
+ * - Định dạng phân cách 'Ngày - Tên chi tiêu - Số tiền'
+ * - Chỉ thị ngữ cảnh: "Đây là dữ liệu chi tháng 8", "Dữ liệu thu tháng 8/2026", "Khoản chi:"
+ */
+export function parseBatchTransactions(content: string, defaultDate: string = new Date().toISOString().split('T')[0]): BatchParseResult {
+  const lines = content.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const rows: BatchParsedRow[] = [];
+
+  let contextType: 'income' | 'expense' | null = null;
+  let contextMonth: number | null = null;
+  let contextYear: number | null = null;
+  let directiveMessages: string[] = [];
+
+  for (const rawLine of lines) {
+    const header = detectHeaderDirective(rawLine);
+    if (header) {
+      if (header.isDirective) {
+        if (header.type) {
+          contextType = header.type;
+        }
+        if (header.month) {
+          contextMonth = header.month;
+          contextYear = header.year || new Date().getFullYear();
+          directiveMessages.push(`Dữ liệu ${contextType === 'income' ? 'Thu' : 'Chi'} Tháng ${contextMonth}/${contextYear}`);
+        } else if (contextType) {
+          directiveMessages.push(`Dữ liệu ${contextType === 'income' ? 'Thu' : 'Chi'}`);
+        }
+      }
+      // Bỏ qua dòng header / directive, không tạo giao dịch
+      continue;
+    }
+
+    // 1. Tách ghi chú ngoặc đơn (...)
+    let note = '';
+    let cleanLine = rawLine;
+    const noteM = cleanLine.match(/\(([^)]+)\)/);
+    if (noteM) {
+      note = noteM[1].trim();
+      cleanLine = cleanLine.replace(noteM[0], ' ').trim();
+    }
+
+    // 2. Kiểm tra nếu có phân cách cột (tab, phẩy, chấm phẩy, hoặc ' - ')
+    let parts: string[] = [];
+    if (cleanLine.includes('\t')) {
+      parts = cleanLine.split('\t').map(s => s.trim()).filter(Boolean);
+    } else if (cleanLine.includes(';') && !cleanLine.includes(',')) {
+      parts = cleanLine.split(';').map(s => s.trim()).filter(Boolean);
+    } else if (cleanLine.includes(',') && !/^\d+,\d+$/.test(cleanLine)) {
+      parts = cleanLine.split(',').map(s => s.trim()).filter(Boolean);
+    } else if (/\s+[-–—]\s+/.test(cleanLine)) {
+      parts = cleanLine.split(/\s+[-–—]\s+/).map(s => s.trim()).filter(Boolean);
+    }
+
+    let date: string | null = null;
+    let amount: number | null = null;
+    let explicitType: 'income' | 'expense' | null = null;
+    let description = '';
+
+    if (parts.length >= 2) {
+      const descTokens: string[] = [];
+      for (const p of parts) {
+        if (!date && parseExplicitDateWithCtx(p, { contextMonth, contextYear })) {
+          date = parseExplicitDateWithCtx(p, { contextMonth, contextYear });
+          continue;
+        }
+        if (amount === null && parsePartAmountCell(p) !== null) {
+          amount = parsePartAmountCell(p);
+          continue;
+        }
+        if (!explicitType && parseExplicitTypeCell(p)) {
+          explicitType = parseExplicitTypeCell(p);
+          continue;
+        }
+        descTokens.push(p);
+      }
+      description = cleanDescriptionText(descTokens.join(' - '));
+    }
+
+    // Nếu không phân tách cột được, hoặc câu tự nhiên liền nhau: "01/08/2026 nhận tiền hoàn techcombank 100k"
+    if (amount === null) {
+      const pAmt = parseAmount(cleanLine);
+      amount = pAmt.amount;
+      cleanLine = pAmt.cleanText;
+
+      if (!date) {
+        const fullD = cleanLine.match(/(?:(?:ngày|hôm|vào)\s+)?\b(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})\b/i);
+        if (fullD) {
+          date = `${fullD[3]}-${fullD[2].padStart(2, '0')}-${fullD[1].padStart(2, '0')}`;
+          cleanLine = cleanLine.replace(fullD[0], ' ').trim();
+        } else {
+          const shortD = cleanLine.match(/(?:(?:ngày|hôm|vào)\s+)?\b(\d{1,2})[\/\-](\d{1,2})\b/i);
+          if (shortD) {
+            const y = contextYear || new Date().getFullYear();
+            date = `${y}-${shortD[2].padStart(2, '0')}-${shortD[1].padStart(2, '0')}`;
+            cleanLine = cleanLine.replace(shortD[0], ' ').trim();
+          } else if (contextMonth) {
+            const dayM = cleanLine.match(/^(?:(?:ngày|hôm|vào)\s+)?(\d{1,2})(?:\s+|$|[-–—:])/i);
+            if (dayM) {
+              const d = parseInt(dayM[1], 10);
+              if (d >= 1 && d <= 31) {
+                const y = contextYear || new Date().getFullYear();
+                date = `${y}-${String(contextMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                cleanLine = cleanLine.replace(dayM[0], ' ').trim();
+              }
+            }
+          }
+        }
+      }
+
+      // Kiểm tra ngày tương đối (hôm qua, hôm nay, thứ...)
+      if (!date) {
+        const dCheck = parseDateFromVietnameseText(cleanLine);
+        if (dCheck.hasExplicitDate && dCheck.date) {
+          date = dCheck.date;
+          cleanLine = dCheck.cleanText;
+        }
+      }
+
+      description = cleanDescriptionText(cleanLine);
+    }
+
+    // Bỏ qua dòng hoàn toàn không có tiền và không có nội dung giao dịch
+    if (!amount || amount <= 0) {
+      continue;
+    }
+
+    if (!date) {
+      date = contextMonth
+        ? `${contextYear || new Date().getFullYear()}-${String(contextMonth).padStart(2, '0')}-01`
+        : defaultDate;
+    }
+
+    // Xác định Type & Category
+    const guessed = guessCategoryAndType(description);
+    const lowerDesc = description.toLowerCase();
+    const hasStrongIncome = matchViWords(lowerDesc, 'lương|salary|thưởng|bonus|thu nhập|cổ tức|lãi|lãi suất|freelance|nhận tiền|tiền vào|được tặng|lì xì|trúng thưởng|hoàn tiền|tiền hoàn|hoàn lại|hoàn trả|cashback|thu nợ|đòi nợ|nhận');
+
+    let finalType: 'income' | 'expense' = guessed.type;
+    if (explicitType) {
+      finalType = explicitType;
+    } else if (hasStrongIncome) {
+      finalType = 'income';
+    } else if (contextType) {
+      finalType = contextType;
+    }
+
+    const errors: string[] = [];
+    if (!description) {
+      description = finalType === 'income' ? 'Khoản thu' : 'Khoản chi';
+    }
+
+    rows.push({
+      date,
+      type: finalType,
+      amount,
+      description,
+      category: guessed.category,
+      note,
+      valid: errors.length === 0,
+      error: errors.join(', '),
+      rawText: rawLine
+    });
+  }
+
+  const directiveSummary = directiveMessages.length > 0 ? directiveMessages[directiveMessages.length - 1] : undefined;
+  return { rows, directiveSummary };
 }
