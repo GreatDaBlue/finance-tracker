@@ -389,17 +389,17 @@ export default function TransactionList({
       {/* Danh sách giao dịch gom nhóm theo ngày */}
       {dates.map(date => {
         const dayTxns = grouped[date];
-        const dayIncome = dayTxns.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-        const dayExpense = dayTxns.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+        const dayIncome = dayTxns.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount || 0), 0);
+        const dayExpense = dayTxns.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount || 0), 0);
 
         return (
           <div key={date} className="bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 overflow-hidden transition-colors">
             {/* Date header */}
-            <div className="px-4 py-2.5 bg-slate-50 dark:bg-zinc-800/60 border-b border-slate-100 dark:border-zinc-800 flex items-center justify-between">
-              <span className="text-sm font-semibold text-slate-700 dark:text-zinc-200">{formatDate(date)}</span>
-              <div className="flex items-center gap-3 text-xs">
-                {dayIncome > 0 && <span className="text-emerald-600 dark:text-emerald-400 font-semibold">+{formatVND(dayIncome)}</span>}
-                {dayExpense > 0 && <span className="text-rose-500 dark:text-rose-400 font-semibold">-{formatVND(dayExpense)}</span>}
+            <div className="px-4 py-2.5 bg-slate-50 dark:bg-zinc-800/60 border-b border-slate-100 dark:border-zinc-800 flex items-center justify-between gap-2 flex-wrap">
+              <span className="text-sm font-semibold text-slate-700 dark:text-zinc-200 shrink-0">{formatDate(date)}</span>
+              <div className="flex items-center gap-2.5 text-xs font-semibold shrink-0">
+                {dayIncome > 0 && <span className="text-emerald-600 dark:text-emerald-400">+{formatVND(dayIncome)}</span>}
+                {dayExpense > 0 && <span className="text-rose-500 dark:text-rose-400">-{formatVND(dayExpense)}</span>}
               </div>
             </div>
 

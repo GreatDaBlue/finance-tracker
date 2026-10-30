@@ -360,7 +360,10 @@ export const api = {
     if (params.sortBy) qs.set('sortBy', params.sortBy);
     if (params.sortDir) qs.set('sortDir', params.sortDir);
     const query = qs.toString();
-    return request<TransactionListResponse>(`/transactions${query ? `?${query}` : ''}`);
+    return request<TransactionListResponse>(`/transactions${query ? `?${query}` : ''}`).then(res => ({
+      ...res,
+      data: (res.data || []).map(t => ({ ...t, amount: Number(t.amount) || 0 }))
+    }));
   },
 
   createTransaction(data: {

@@ -98,8 +98,25 @@ router.get('/', requireAuth, async (req: AuthenticatedRequest, res: Response) =>
 
   const total = Number(countRow?.c || 0);
 
-  res.json({ data: rows, total, limit: lim, offset: off });
+  const normalizedRows = rows.map(r => ({
+    ...r,
+    amount: Number(r.amount)
+  }));
+
+  res.json({ data: normalizedRows, total, limit: lim, offset: off });
 });
+
+function sanitizeDescription(desc: string): string {
+  return (desc || '')
+    .replace(/(?:(?:vào|hôm|ngày)\s+)?\b\d{1,2}[\/\-\.]\d{1,2}(?:[\/\-\.]\d{4})?\b/iu, ' ')
+    .replace(/[\s:\-\u2013\u2014]+(?:đồng|dong|đ|vnd)(?![a-zA-Z0-9\p{L}])/giu, '')
+    .replace(/(?:^|\s)(?:đồng|dong|đ|vnd)$/giu, '')
+    .replace(/^\s*\d+[\.\)\-:]\s*/, '')
+    .replace(/[\-\u2013\u2014\s]{2,}/g, ' - ')
+    .replace(/^[\s,;:\-\u2013\u2014\•\*]+/, '')
+    .replace(/[\s,;:\-\u2013\u2014\•\*]+$/, '')
+    .trim();
+}
 
 // ── POST /api/transactions ─────────────────────────────────────────────────
 router.post('/', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
@@ -124,14 +141,14 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res: Response) =
   }
 
   let resolvedDate: string;
-  let cleanDescription = description.trim();
+  let cleanDescription = sanitizeDescription(description);
 
   if (manualDate) {
     resolvedDate = manualDate;
   } else {
     const parsed = parseDateFromText(description, new Date());
     resolvedDate = formatDate(parsed.date);
-    cleanDescription = parsed.cleanText || description.trim();
+    cleanDescription = sanitizeDescription(parsed.cleanText || description);
   }
 
   const category = manualCategory || (await classify(cleanDescription, type));
@@ -142,6 +159,7 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res: Response) =
   ).run(userId, resolvedDate, type, amount, cleanDescription, category, note || '');
 
   const created = await db.prepare('SELECT * FROM transactions WHERE id = ?').get<Transaction>(result.lastInsertRowid);
+  if (created) created.amount = Number(created.amount);
   return res.status(201).json(created);
 });
 
@@ -170,14 +188,14 @@ router.post('/batch', requireAuth, async (req: AuthenticatedRequest, res: Respon
     if (typeof item.amount !== 'number' || item.amount <= 0) continue;
 
     let resolvedDate: string;
-    let cleanDescription = item.description.trim();
+    let cleanDescription = sanitizeDescription(item.description);
 
     if (item.date) {
       resolvedDate = item.date;
     } else {
       const parsed = parseDateFromText(item.description, new Date());
       resolvedDate = formatDate(parsed.date);
-      cleanDescription = parsed.cleanText || item.description.trim();
+      cleanDescription = sanitizeDescription(parsed.cleanText || item.description);
     }
 
     const category = item.category || (await classify(cleanDescription, item.type));
@@ -188,7 +206,10 @@ router.post('/batch', requireAuth, async (req: AuthenticatedRequest, res: Respon
     ).run(userId, resolvedDate, item.type, item.amount, cleanDescription, category, item.note || '');
 
     const created = await db.prepare('SELECT * FROM transactions WHERE id = ?').get<Transaction>(result.lastInsertRowid);
-    if (created) createdList.push(created);
+    if (created) {
+      created.amount = Number(created.amount);
+      createdList.push(created);
+    }
   }
 
   return res.status(201).json({ data: createdList, count: createdList.length });
@@ -225,8 +246,8 @@ router.put('/:id', requireAuth, async (req: AuthenticatedRequest, res: Response)
   const updated = {
     date: date ?? existing.date,
     type: type ?? existing.type,
-    amount: amount ?? existing.amount,
-    description: description ?? existing.description,
+    amount: amount !== undefined ? Number(amount) : Number(existing.amount),
+    description: description !== undefined ? sanitizeDescription(description) : existing.description,
     category: category ?? existing.category,
     note: note ?? existing.note
   };

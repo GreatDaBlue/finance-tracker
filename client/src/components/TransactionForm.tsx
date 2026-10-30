@@ -7,6 +7,7 @@ import {
   guessCategoryAndType,
   parseDateFromVietnameseText,
   parseMultiSmartInput,
+  cleanDescriptionText,
   type ParsedTransactionItem,
   DANH_MUC,
   getCategoryIcon
@@ -194,7 +195,7 @@ export default function TransactionForm({ onCreated, user }: Props) {
       if (!category || category === 'Sổ nợ') {
         setCategory(guessed.category);
       }
-      setDescription(clientDate.cleanText || parsed.description || smartText.trim());
+      setDescription(cleanDescriptionText(clientDate.cleanText || parsed.description || smartText.trim()));
 
       // Gọi server classifyPreview
       clearTimeout(previewTimer.current);
@@ -210,12 +211,12 @@ export default function TransactionForm({ onCreated, user }: Props) {
           setPreview(p);
           if (p.suggestedDate) setDate(p.suggestedDate);
           setCategory(p.category || guessed.category);
-          setDescription(p.cleanDescription || parsed.description);
+          setDescription(cleanDescriptionText(p.cleanDescription || parsed.description));
         } catch {
           setPreview({
             category: guessed.category,
             suggestedDate: clientDate.date,
-            cleanDescription: clientDate.cleanText || parsed.description
+            cleanDescription: cleanDescriptionText(clientDate.cleanText || parsed.description)
           });
         }
       }, 380);
@@ -364,7 +365,7 @@ export default function TransactionForm({ onCreated, user }: Props) {
 
     // Trường hợp 2: Nhập giao dịch đơn lẻ hoặc Nợ đơn lẻ
     let finalAmount = parseAmountInput(amount);
-    let finalDesc = description.trim() || smartText.trim();
+    let finalDesc = cleanDescriptionText(description.trim() || smartText.trim());
     let finalNote = note.trim();
     let finalType = type;
     let finalDate = date;

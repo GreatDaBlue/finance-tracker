@@ -5,6 +5,7 @@ import {
   parseAmountInput,
   parseDateFromVietnameseText,
   guessCategoryAndType,
+  cleanDescriptionText,
   formatAmountDisplay
 } from '../lib/smartParser';
 import { Upload, X, Check, AlertCircle, FileText, ClipboardList } from 'lucide-react';
@@ -176,7 +177,7 @@ export default function ImportModal({ onImported, onClose }: Props) {
         }
 
         const amount = parseAmountInput(amountStr || '0');
-        const desc = descStr || cols[0] || `Giao dịch ${idx + 1}`;
+        const desc = cleanDescriptionText(descStr || cols[0] || `Giao dịch ${idx + 1}`);
         const guessed = guessCategoryAndType(desc);
         const type = parseExplicitType(typeStr) || guessed.type;
         const category = catStr || guessed.category;
@@ -205,7 +206,7 @@ export default function ImportModal({ onImported, onClose }: Props) {
         const dateParsed = parseDateFromVietnameseText(smart.description);
         const guessed = guessCategoryAndType(line);
 
-        const desc = dateParsed.cleanText || smart.description || line;
+        const desc = cleanDescriptionText(dateParsed.cleanText || smart.description || line);
         const amount = smart.amount || 0;
 
         const errors: string[] = [];

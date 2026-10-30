@@ -113,25 +113,33 @@ export function parseAmount(text: string): { amount: number | null; cleanText: s
   }
 
   // 8. Ngàn / Nghìn / k: 20k, 50k, 20nghìn, 50ngàn
-  const kM = clean.match(/(\d+(?:[.,]\d+)?)\s*(?:k|nghìn|nghin|ngàn|ngan)(?![a-zA-Z\p{L}])/iu);
+  const kM = clean.match(/(?:[\-:\u2013\u2014]\s*)?(\d+(?:[.,]\d+)?)\s*(?:k|nghìn|nghin|ngàn|ngan)(?![a-zA-Z0-9\p{L}])/iu);
   if (kM) {
     return { amount: parseViNum(kM[1]) * 1_000, cleanText: clean.replace(kM[0], '').trim() };
   }
 
   // 9. Có đơn vị đồng/đ/vnd: 20000đ, 20.000đ, 20.000 đồng
-  const dongRx = /(\d[\d.]*)\s*(?:đồng|dong|đ|vnd)\b/i;
+  const dongRx = /(?:[\-:\u2013\u2014]\s*)?(\d[\d.]*)\s*(?:đồng|dong|đ|vnd)(?![a-zA-Z0-9\p{L}])/iu;
   const dongM = clean.match(dongRx);
   if (dongM) {
     const num = parseInt(dongM[1].replace(/\./g, ''), 10);
     return { amount: num, cleanText: clean.replace(dongM[0], '').trim() };
   }
 
-  // 10. Số có dấu chấm ngăn cách kiểu Việt: 20.000, 1.000.000
-  const fmtRx = /\b(\d{1,3}(?:\.\d{3})+)\b/;
+  // 10. Số có dấu chấm ngăn cách kiểu Việt: 20.000, 1.000.000 (kèm hoặc không kèm đ/đồng)
+  const fmtRx = /(?:[\-:\u2013\u2014]\s*)?\b(\d{1,3}(?:\.\d{3})+)(?:\s*(?:đồng|dong|đ|vnd))?(?![a-zA-Z0-9\p{L}])/iu;
   const fmtM = clean.match(fmtRx);
   if (fmtM) {
     const num = parseInt(fmtM[1].replace(/\./g, ''), 10);
     return { amount: num, cleanText: clean.replace(fmtM[0], '').trim() };
+  }
+
+  // 11. Số nguyên thông thường từ 4 chữ số trở lên: 40000, 25000 (tránh nhầm với số thứ tự hay ngày tháng)
+  const plainNumRx = /(?:[\-:\u2013\u2014]\s*)?\b(\d{4,12})(?:\s*(?:đồng|dong|đ|vnd))?(?![a-zA-Z0-9\p{L}])/iu;
+  const plainM = clean.match(plainNumRx);
+  if (plainM) {
+    const num = parseInt(plainM[1], 10);
+    return { amount: num, cleanText: clean.replace(plainM[0], '').trim() };
   }
 
   return { amount: null, cleanText: clean };
@@ -179,8 +187,8 @@ export function parseDateFromVietnameseText(text: string, today: Date = new Date
   const pad = (n: number) => String(n).padStart(2, '0');
   const toISO = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
-  // 1. Ngày đầy đủ: dd/MM/YYYY hoặc dd-MM-YYYY (kèm từ tiền tố "vào / hôm / ngày" nếu có)
-  const fullDateRx = /(?:(?:vào|hôm|ngày)\s+)?\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\b/iu;
+  // 1. Ngày đầy đủ: dd/MM/YYYY hoặc dd-MM-YYYY hoặc dd.MM.YYYY (kèm từ tiền tố "vào / hôm / ngày" nếu có)
+  const fullDateRx = /(?:(?:vào|hôm|ngày)\s+)?\b(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})\b/iu;
   const fullM = remaining.match(fullDateRx);
   if (fullM) {
     const day = parseInt(fullM[1], 10);
@@ -191,7 +199,7 @@ export function parseDateFromVietnameseText(text: string, today: Date = new Date
       const clean = remaining.replace(fullM[0], ' ').replace(/\s{2,}/g, ' ').trim();
       return {
         date: toISO(d),
-        cleanText: clean.replace(/^[\s,;:\-]+/, '').replace(/[\s,;:\-]+$/, '').trim(),
+        cleanText: cleanDescriptionText(clean),
         hasExplicitDate: true
       };
     }
@@ -214,7 +222,7 @@ export function parseDateFromVietnameseText(text: string, today: Date = new Date
       const clean = remaining.replace(thangM[0], ' ').replace(/\s{2,}/g, ' ').trim();
       return {
         date: toISO(d),
-        cleanText: clean.replace(/^[\s,;:\-]+/, '').replace(/[\s,;:\-]+$/, '').trim(),
+        cleanText: cleanDescriptionText(clean),
         hasExplicitDate: true
       };
     }
@@ -236,7 +244,7 @@ export function parseDateFromVietnameseText(text: string, today: Date = new Date
         const clean = remaining.replace(shortM[0], ' ').replace(/\s{2,}/g, ' ').trim();
         return {
           date: toISO(d),
-          cleanText: clean.replace(/^[\s,;:\-]+/, '').replace(/[\s,;:\-]+$/, '').trim(),
+          cleanText: cleanDescriptionText(clean),
           hasExplicitDate: true
         };
       }
@@ -252,7 +260,7 @@ export function parseDateFromVietnameseText(text: string, today: Date = new Date
     const clean = remaining.replace(homKiaM[0], ' ').replace(/\s{2,}/g, ' ').trim();
     return {
       date: toISO(d),
-      cleanText: clean.replace(/^[\s,;:\-]+/, '').replace(/[\s,;:\-]+$/, '').trim(),
+      cleanText: cleanDescriptionText(clean),
       hasExplicitDate: true
     };
   }
@@ -266,7 +274,7 @@ export function parseDateFromVietnameseText(text: string, today: Date = new Date
     const clean = remaining.replace(homQuaM[0], ' ').replace(/\s{2,}/g, ' ').trim();
     return {
       date: toISO(d),
-      cleanText: clean.replace(/^[\s,;:\-]+/, '').replace(/[\s,;:\-]+$/, '').trim(),
+      cleanText: cleanDescriptionText(clean),
       hasExplicitDate: true
     };
   }
@@ -280,7 +288,7 @@ export function parseDateFromVietnameseText(text: string, today: Date = new Date
     const clean = remaining.replace(baNgayM[0], ' ').replace(/\s{2,}/g, ' ').trim();
     return {
       date: toISO(d),
-      cleanText: clean.replace(/^[\s,;:\-]+/, '').replace(/[\s,;:\-]+$/, '').trim(),
+      cleanText: cleanDescriptionText(clean),
       hasExplicitDate: true
     };
   }
@@ -292,7 +300,7 @@ export function parseDateFromVietnameseText(text: string, today: Date = new Date
     const clean = remaining.replace(homNayM[0], ' ').replace(/\s{2,}/g, ' ').trim();
     return {
       date: toISO(today),
-      cleanText: clean.replace(/^[\s,;:\-]+/, '').replace(/[\s,;:\-]+$/, '').trim(),
+      cleanText: cleanDescriptionText(clean),
       hasExplicitDate: true
     };
   }
@@ -320,13 +328,32 @@ export function parseDateFromVietnameseText(text: string, today: Date = new Date
       const clean = remaining.replace(thuM[0], ' ').replace(/\s{2,}/g, ' ').trim();
       return {
         date: toISO(d),
-        cleanText: clean.replace(/^[\s,;:\-]+/, '').replace(/[\s,;:\-]+$/, '').trim(),
+        cleanText: cleanDescriptionText(clean),
         hasExplicitDate: true
       };
     }
   }
 
-  return { date: toISO(today), cleanText: remaining.trim(), hasExplicitDate: false };
+  return { date: toISO(today), cleanText: cleanDescriptionText(remaining), hasExplicitDate: false };
+}
+
+/**
+ * Làm sạch mô tả giao dịch: loại bỏ ký tự gạch đầu dòng, dấu hai chấm, dấu gạch nối, đơn vị tiền thừa
+ */
+export function cleanDescriptionText(text: string): string {
+  let res = text.trim();
+  // Loại bỏ các đơn vị tiền tệ hoặc dấu gạch nối tiền bị sót: " - đ", " - đồng", "đ", "vnd"
+  res = res.replace(/[\s:\-\u2013\u2014]+(?:đồng|dong|đ|vnd)(?![a-zA-Z0-9\p{L}])/giu, '');
+  res = res.replace(/(?:^|\s)(?:đồng|dong|đ|vnd)$/giu, '');
+  // Loại bỏ số thứ tự ở đầu như "1. ", "2) ", "1- "
+  res = res.replace(/^\s*\d+[\.\)\-:]\s*/, '');
+  // Loại bỏ từ đệm đầu/cuối: "hết", "mất", "được", "tầm", v.v.
+  res = cleanFillerWords(res);
+  // Gom các dấu gạch nối liên tiếp "--", " - - " thành " - "
+  res = res.replace(/[\-\u2013\u2014\s]{2,}/g, ' - ');
+  // Loại bỏ các ký tự phân cách ở đầu và cuối: dấu hai chấm :, gạch ngang -, gạch dài –, —, chấm phẩy ;, phẩy ,, chấm .
+  res = res.replace(/^[\s,;:\-\u2013\u2014\•\*]+/, '').replace(/[\s,;:\-\u2013\u2014\•\*]+$/, '').trim();
+  return res;
 }
 
 /**
@@ -436,19 +463,19 @@ export function guessCategoryAndType(text: string): { type: 'income' | 'expense'
 
   // 3. Nhận diện chi tiêu theo từ khóa:
   // Ăn uống: cơm, phở, trà sữa, cafe, ăn, uống, bún, bánh...
-  if (matchViWords(lower, 'ăn|uống|cơm|phở|bún|bánh|mì|miến|cháo|thịt|rau|cá|cafe|cà phê|coffee|trà|trà sữa|nước|sinh tố|siêu thị|chợ|buffet|quán|lẩu|nướng|nhậu|trưa|tối|sáng|bữa')) {
+  if (matchViWords(lower, 'ăn|uống|cơm|phở|bún|bánh|mì|miến|cháo|thịt|rau|cá|cafe|cà phê|coffee|trà|trà sữa|nước|sinh tố|siêu thị|chợ|buffet|quán|lẩu|nướng|nhậu|trưa|tối|sáng|bữa|hoa quả|trái cây|mít|sầu riêng|cam|táo|ổi|dưa|chuối|xoài|thực phẩm')) {
     return { type: 'expense', category: 'Ăn uống' };
   }
   // Xe cộ: xăng, xe, gửi xe, đổ xăng, rửa xe, grab, taxi...
   if (matchViWords(lower, 'xăng|xe|gửi xe|đậu xe|bãi xe|đổ xăng|rửa xe|sửa xe|thay nhớt|grab|be|gojek|taxi|bus|vé xe|vé tàu|vé máy bay')) {
     return { type: 'expense', category: 'Xe cộ' };
   }
-  // Sức khỏe: gym, thuốc, khám, bác sĩ, bệnh viện, nha khoa...
-  if (matchViWords(lower, 'gym|thuốc|mua thuốc|bệnh viện|khám|bác sĩ|nha|răng|nha khoa|fitness|yoga|spa|mát xa|cắt tóc|gội đầu|mỹ phẩm')) {
+  // Sức khỏe: gym, thuốc, khám, bác sĩ, bệnh viện, nha khoa, cồn y tế, ráy tai...
+  if (matchViWords(lower, 'gym|thuốc|mua thuốc|bệnh viện|khám|bác sĩ|nha|răng|nha khoa|fitness|yoga|spa|mát xa|cắt tóc|gội đầu|mỹ phẩm|cồn|ráy tai|vệ sinh tai|tai mũi họng|y tế')) {
     return { type: 'expense', category: 'Sức khỏe' };
   }
   // Nhà cửa & Tiện ích
-  if (matchViWords(lower, 'điện|nước|tiền điện|tiền nước|internet|wifi|tiền nhà|thuê nhà|phòng trọ|chung cư|gas|rác|vệ sinh')) {
+  if (matchViWords(lower, 'điện|nước|tiền điện|tiền nước|internet|wifi|tiền nhà|thuê nhà|phòng trọ|chung cư|gas|rác|dọn vệ sinh|vệ sinh nhà')) {
     return { type: 'expense', category: 'Nhà cửa' };
   }
   // Mua sắm & Giải trí
@@ -633,8 +660,8 @@ export function parseMultiSmartInput(rawText: string, defaultDate: string = new 
     // Khôi phục dấu phẩy trong ngoặc
     clause = clause.replace(/__COMMA__/g, ',').replace(/__SEMI__/g, ';');
 
-    // Dọn sạch gạch đầu dòng, bullet point ở đầu clause
-    clause = clause.replace(/^[\-\*\+•\s]+/, '').trim();
+    // Dọn sạch gạch đầu dòng, bullet point, dấu hai chấm ở đầu clause
+    clause = clause.replace(/^[\-\*\+•:\u2013\u2014\s]+/, '').trim();
     if (!clause) continue;
 
     const parsed = parseSmartInput(clause);
@@ -662,10 +689,7 @@ export function parseMultiSmartInput(rawText: string, defaultDate: string = new 
       desc = clauseDate.cleanText;
     }
 
-    // Loại bỏ số thứ tự ở đầu như "1. ", "2) " nếu có (ví dụ khi copy từ danh sách đánh số)
-    desc = desc.replace(/^\s*\d+[\.\)\-:]\s*/, '');
-    desc = cleanFillerWords(desc);
-    desc = desc.replace(/^[\s,;:\-]+/, '').replace(/[\s,;:\-]+$/, '').trim();
+    desc = cleanDescriptionText(desc);
 
     // Kiểm tra xem mệnh đề có phải là khoản nợ (cho vay hoặc đi vay) không
     const debtInfo = detectDebtInfo(desc || clause);

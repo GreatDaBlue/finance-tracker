@@ -1,7 +1,11 @@
 import initSqlJs, { Database as SqlJsDatabase } from 'sql.js';
-import { Pool } from 'pg';
+import { Pool, types } from 'pg';
 import path from 'path';
 import fs from 'fs';
+
+// Đảm bảo pg parse các cột NUMERIC và BIGINT thành number trong JavaScript
+types.setTypeParser(1700, (val: string) => parseFloat(val));
+types.setTypeParser(20, (val: string) => parseInt(val, 10));
 
 // ── Định nghĩa Interface chung cho cả SQLite và PostgreSQL ───────────────
 export interface IDatabase {
