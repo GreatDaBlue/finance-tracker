@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { api, formatVND, todayISO, getUserDisplayName, type Transaction, type User } from '../lib/api';
 import {
   parseSmartInput,
@@ -45,22 +46,6 @@ export default function TransactionForm({ onCreated, user }: Props) {
 
   const previewTimer = useRef<ReturnType<typeof setTimeout>>();
   const recognitionRef = useRef<any>(null);
-  const helpRef = useRef<HTMLDivElement>(null);
-
-  // Đóng tooltip trợ giúp khi click ra ngoài
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (helpRef.current && !helpRef.current.contains(event.target as Node)) {
-        setShowHelp(false);
-      }
-    }
-    if (showHelp) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showHelp]);
 
   // Dừng nhận diện giọng nói khi component unmount
   useEffect(() => {
@@ -543,80 +528,89 @@ export default function TransactionForm({ onCreated, user }: Props) {
         </div>
 
         {/* Nút trợ giúp ? */}
-        <div className="relative" ref={helpRef}>
+        <div>
           <button
             type="button"
-            onClick={() => setShowHelp(!showHelp)}
+            onClick={() => setShowHelp(true)}
             className="w-7 h-7 rounded-full bg-slate-100 dark:bg-zinc-800 hover:bg-blue-100 dark:hover:bg-zinc-700 text-slate-600 dark:text-zinc-300 hover:text-blue-600 font-bold text-sm flex items-center justify-center transition-all shadow-xs"
             title="Gợi ý cách sử dụng"
           >
             ?
           </button>
 
-          {showHelp && (
-            <div className="absolute right-0 top-9 z-50 w-80 sm:w-96 p-4 bg-slate-900 text-white text-xs rounded-2xl shadow-2xl border border-slate-700 animate-in fade-in zoom-in-95 duration-150">
-              <div className="flex justify-between items-start gap-2 mb-2">
-                <span className="font-semibold text-amber-300 flex items-center gap-1.5 text-sm">
-                  💡 Gợi ý cách sử dụng
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setShowHelp(false)}
-                  className="text-slate-400 hover:text-white p-0.5"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
+          {showHelp && createPortal(
+            <div
+              className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+              onClick={() => setShowHelp(false)}
+            >
+              <div
+                className="bg-slate-900 text-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-700 space-y-3 max-h-[85vh] overflow-y-auto animate-in zoom-in-95 duration-150"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+                  <span className="font-semibold text-amber-300 flex items-center gap-2 text-sm">
+                    💡 Gợi ý cách nhập nhanh
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowHelp(false)}
+                    className="w-7 h-7 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
 
-              {/* Câu hỏi theo đúng văn bản yêu cầu */}
-              <p className="text-slate-200 leading-relaxed text-xs mb-2.5">
-                Chỉ cần gõ theo cách {userName} nói (ví dụ: &ldquo;<span
-                  className="text-amber-300 font-medium underline cursor-pointer hover:text-amber-200"
-                  onClick={() => {
-                    setSmartText('hôm qua ăn phở 100k với Hoàng(trong đó 50k mời Hoàng)');
-                    setShowHelp(false);
-                  }}
-                  title="Nhấn để áp dụng câu mẫu này"
-                >hôm qua ăn phở 100k với Hoàng(trong đó 50k mời Hoàng)</span>&rdquo;), hệ thống sẽ tự nhận diện số tiền, ngày và danh mục.
-              </p>
-
-              {/* Ví dụ nhập nhiều giao dịch cùng 1 dòng & Sổ nợ */}
-              <div className="pt-2 border-t border-slate-800 space-y-1.5">
-                <span className="font-semibold text-sky-300 block">
-                  ⚡ Mới: Ghi nợ / Cho vay tự động & Nhiều giao dịch:
-                </span>
-                <p className="text-slate-300 text-[11px] leading-relaxed">
-                  Hiểu từ lóng: <span className="text-amber-300 font-semibold">k</span>, <span className="text-amber-300 font-semibold">lít</span> (100k), <span className="text-amber-300 font-semibold">củ</span> (1 triệu), <span className="text-amber-300 font-semibold">tr</span>...
+                {/* Câu hỏi theo đúng văn bản yêu cầu */}
+                <p className="text-slate-200 leading-relaxed text-xs">
+                  Chỉ cần gõ theo cách {userName} nói (ví dụ: &ldquo;<span
+                    className="text-amber-300 font-medium underline cursor-pointer hover:text-amber-200"
+                    onClick={() => {
+                      setSmartText('hôm qua ăn phở 100k với Hoàng(trong đó 50k mời Hoàng)');
+                      setShowHelp(false);
+                    }}
+                    title="Nhấn để áp dụng câu mẫu này"
+                  >hôm qua ăn phở 100k với Hoàng(trong đó 50k mời Hoàng)</span>&rdquo;), hệ thống sẽ tự nhận diện số tiền, ngày và danh mục.
                 </p>
-                <div
-                  className="p-2 rounded-lg bg-slate-800/80 border border-slate-700 text-purple-300 cursor-pointer hover:bg-slate-800 transition-colors space-y-1"
-                  onClick={() => {
-                    setSmartText('đổ xăng 50k, cho Nam vay 200k, ăn trưa 40k');
-                    setShowHelp(false);
-                  }}
-                  title="Nhấn để thử câu có cả chi tiêu & cho vay này"
-                >
-                  <span className="text-amber-300 font-semibold text-[11px] block">👉 Ví dụ kết hợp chi tiêu & cho vay:</span>
-                  <span>&ldquo;đổ xăng 50k, cho Nam vay 200k, ăn trưa 40k&rdquo;</span>
+
+                {/* Ví dụ nhập nhiều giao dịch cùng 1 dòng & Sổ nợ */}
+                <div className="pt-2 border-t border-slate-800 space-y-2">
+                  <span className="font-semibold text-sky-300 block text-xs">
+                    ⚡ Ghi nợ / Cho vay tự động & Nhiều giao dịch:
+                  </span>
+                  <p className="text-slate-300 text-[11px] leading-relaxed">
+                    Hiểu từ lóng: <span className="text-amber-300 font-semibold">k</span>, <span className="text-amber-300 font-semibold">lít</span> (100k), <span className="text-amber-300 font-semibold">củ</span> (1 triệu), <span className="text-amber-300 font-semibold">tr</span>...
+                  </p>
+                  <div
+                    className="p-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-purple-300 cursor-pointer hover:bg-slate-800 hover:border-purple-500/50 transition-colors space-y-1"
+                    onClick={() => {
+                      setSmartText('đổ xăng 50k, cho Nam vay 200k, ăn trưa 40k');
+                      setShowHelp(false);
+                    }}
+                    title="Nhấn để thử câu có cả chi tiêu & cho vay này"
+                  >
+                    <span className="text-amber-300 font-semibold text-[11px] block">👉 Ví dụ kết hợp chi tiêu & cho vay:</span>
+                    <span className="text-xs">&ldquo;đổ xăng 50k, cho Nam vay 200k, ăn trưa 40k&rdquo;</span>
+                  </div>
+
+                  <div
+                    className="p-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-amber-200 cursor-pointer hover:bg-slate-800 hover:border-amber-500/50 transition-colors space-y-1"
+                    onClick={() => {
+                      setSmartText('nhận thưởng 1 củ, mời Đạt ăn 5 lít, đổ xăng 50k, bán máy tính 2tr5');
+                      setShowHelp(false);
+                    }}
+                    title="Nhấn để thử câu nhiều giao dịch này"
+                  >
+                    <span className="text-sky-300 font-semibold text-[11px] block">👉 Ví dụ nhiều giao dịch:</span>
+                    <span className="text-xs">&ldquo;nhận thưởng 1 củ, mời Đạt ăn 5 lít, đổ xăng 50k, bán máy tính 2tr5&rdquo;</span>
+                  </div>
                 </div>
 
-                <div
-                  className="p-2 rounded-lg bg-slate-800/80 border border-slate-700 text-amber-200 cursor-pointer hover:bg-slate-800 transition-colors space-y-1"
-                  onClick={() => {
-                    setSmartText('nhận thưởng 1 củ, mời Đạt ăn 5 lít, đổ xăng 50k, bán máy tính 2tr5');
-                    setShowHelp(false);
-                  }}
-                  title="Nhấn để thử câu nhiều giao dịch này"
-                >
-                  <span className="text-sky-300 font-semibold text-[11px] block">👉 Ví dụ nhiều giao dịch:</span>
-                  <span>&ldquo;nhận thưởng 1 củ, mời Đạt ăn 5 lít, đổ xăng 50k, bán máy tính 2tr5&rdquo;</span>
+                <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-300 leading-relaxed bg-slate-800/50 p-2 rounded-lg">
+                  💡 <span className="text-purple-300 font-medium">Ghi nợ:</span> Chỉ cần gõ <span className="text-amber-200 font-medium">&ldquo;cho Nam vay 500k&rdquo;</span> hoặc <span className="text-amber-200 font-medium">&ldquo;vay anh Tuấn 2tr&rdquo;</span>, hệ thống sẽ tự nhận biết và lưu vào <strong>Sổ nợ</strong> mà không tính vào thu chi!
                 </div>
               </div>
-
-              <div className="mt-2.5 pt-2 border-t border-slate-800 text-[11px] text-slate-400">
-                💡 <span className="text-purple-300">Ghi nợ:</span> Chỉ cần gõ <span className="text-amber-200 font-medium">&ldquo;cho Nam vay 500k&rdquo;</span> hoặc <span className="text-amber-200 font-medium">&ldquo;vay anh Tuấn 2tr&rdquo;</span>, hệ thống sẽ tự nhận biết và lưu vào <strong>Sổ nợ</strong> mà không tính vào thu chi!
-              </div>
-            </div>
+            </div>,
+            document.body
           )}
         </div>
       </div>
