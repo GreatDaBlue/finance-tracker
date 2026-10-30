@@ -663,7 +663,7 @@ export function detectHeaderDirective(line: string): HeaderDirectiveResult | nul
 
   // 3. Tiêu đề chỉ thị Thu / Chi và Tháng / Năm:
   // Ví dụ: 'Đây là dữ liệu chi tháng 8', 'Bảng chi tiêu tháng 8/2026', 'Khoản thu tháng 8:', 'Chi tiêu tháng 8'
-  const directiveRx = /^(?:(?:\d+[\.\)\-:]\s*)?(?:đây\s+là\s+)?(?:dữ\s+liệu|danh\s+sách|bảng|các\s+khoản|khoản|phần)?\s*)?(chi\s+tiêu|chi|thu\s+nhập|thu|tiền\s+vào|tiền\s+ra)(?:\s+(?:cá\s+nhân|gia\s+đình|sinh\s+hoạt))?(?:\s+(?:tháng|thg)\s*(\d{1,2}))?(?:\s*(?:năm|\/|-)\s*(\d{4}))?[:\s]*$/iu;
+  const directiveRx = /^(?:(?:\d+[\.\)\-:]\s*)?(?:đây\s+là\s+|tất\s+cả\s+là\s+|toàn\s+bộ\s+là\s+)?(?:dữ\s+liệu|danh\s+sách|bảng|các\s+khoản|khoản|phần)?\s*)?(chi\s+tiêu|chi|thu\s+nhập|thu|tiền\s+vào|tiền\s+ra)(?:\s+(?:cá\s+nhân|gia\s+đình|sinh\s+hoạt))?(?:\s+(?:tháng|thg)\s*(\d{1,2}))?(?:\s*(?:năm|\/|-)\s*(\d{4}))?[:\s]*$/iu;
   const m = t.match(directiveRx);
   if (m) {
     const rawType = m[1].toLowerCase();
@@ -690,7 +690,11 @@ export function detectHeaderDirective(line: string): HeaderDirectiveResult | nul
  * Đọc hiểu câu nhập kép / nhiều giao dịch trên cùng 1 dòng
  * Ví dụ: "nhận thưởng 1tr, mời Đạt đi ăn 500k, đổ xăng 100k, bán máy tính đc 1tr"
  */
-export function parseMultiSmartInput(rawText: string, defaultDate: string = new Date().toISOString().split('T')[0]): ParsedTransactionItem[] {
+export function parseMultiSmartInput(
+  rawText: string,
+  defaultDate: string = new Date().toISOString().split('T')[0],
+  defaultType?: 'expense' | 'income'
+): ParsedTransactionItem[] {
   const trimmed = rawText.trim();
   if (!trimmed) return [];
 
@@ -794,15 +798,23 @@ export function parseMultiSmartInput(rawText: string, defaultDate: string = new 
       });
     } else {
       const guessed = guessCategoryAndType(desc || clause);
-      // Ưu tiên: nếu mô tả có từ nhận tiền / hoàn tiền / lương / thưởng thì luôn là income
       const lowerDesc = desc.toLowerCase();
-      const hasStrongIncome = matchViWords(lowerDesc, 'lương|salary|thưởng|bonus|thu nhập|cổ tức|lãi|lãi suất|freelance|nhận tiền|tiền vào|được tặng|lì xì|trúng thưởng|hoàn tiền|tiền hoàn|hoàn lại|hoàn trả|cashback|thu nợ|đòi nợ|nhận');
+      const hasStrongIncome = matchViWords(lowerDesc, 'lương|salary|thưởng|bonus|thu nhập|cổ tức|lãi|lãi suất|freelance|nhận tiền|tiền vào|được tặng|lì xì|trúng thưởng|hoàn tiền|tiền hoàn|hoàn lại|hoàn trả|cashback|thu nợ|đòi nợ');
 
-      let finalType: 'income' | 'expense' = guessed.type;
-      if (hasStrongIncome) {
-        finalType = 'income';
-      } else if (currentContextType) {
+      // Thứ tự ưu tiên xác định loại giao dịch:
+      // 1. Chỉ thị ngữ cảnh có quyền lực cao nhất ("Đây là dữ liệu chi tháng 8", "Khoản chi:") -> 100% là expense!
+      // 2. Nếu không có chỉ thị ngữ cảnh, kiểm tra từ khóa thu nhập rõ ràng (lương, thưởng, nhận tiền...)
+      // 3. Nếu người dùng đang chọn loại cụ thể trên form (defaultType) -> áp dụng defaultType
+      // 4. Mặc định suy đoán theo mô tả
+      let finalType: 'income' | 'expense';
+      if (currentContextType) {
         finalType = currentContextType;
+      } else if (hasStrongIncome) {
+        finalType = 'income';
+      } else if (defaultType) {
+        finalType = defaultType;
+      } else {
+        finalType = guessed.type;
       }
 
       items.push({
@@ -1012,15 +1024,18 @@ export function parseBatchTransactions(content: string, defaultDate: string = ne
     // Xác định Type & Category
     const guessed = guessCategoryAndType(description);
     const lowerDesc = description.toLowerCase();
-    const hasStrongIncome = matchViWords(lowerDesc, 'lương|salary|thưởng|bonus|thu nhập|cổ tức|lãi|lãi suất|freelance|nhận tiền|tiền vào|được tặng|lì xì|trúng thưởng|hoàn tiền|tiền hoàn|hoàn lại|hoàn trả|cashback|thu nợ|đòi nợ|nhận');
+    const hasStrongIncome = matchViWords(lowerDesc, 'lương|salary|thưởng|bonus|thu nhập|cổ tức|lãi|lãi suất|freelance|nhận tiền|tiền vào|được tặng|lì xì|trúng thưởng|hoàn tiền|tiền hoàn|hoàn lại|hoàn trả|cashback|thu nợ|đòi nợ');
 
-    let finalType: 'income' | 'expense' = guessed.type;
+    let finalType: 'income' | 'expense';
     if (explicitType) {
       finalType = explicitType;
+    } else if (contextType) {
+      // Chỉ thị ngữ cảnh có mức độ ưu tiên cao nhất (ví dụ: "Đây là dữ liệu chi tháng 8" -> tất cả là chi)
+      finalType = contextType;
     } else if (hasStrongIncome) {
       finalType = 'income';
-    } else if (contextType) {
-      finalType = contextType;
+    } else {
+      finalType = guessed.type;
     }
 
     const errors: string[] = [];

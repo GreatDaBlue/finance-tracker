@@ -141,26 +141,52 @@ export default function TransactionForm({ onCreated, user }: Props) {
     }
 
     // 1. Phân tích đa giao dịch / giao dịch kép
-    const multi = parseMultiSmartInput(smartText, todayISO());
+    const activeDefaultType = userOverrodeType ? (type === 'income' ? 'income' : 'expense') : undefined;
+    const multi = parseMultiSmartInput(smartText, todayISO(), activeDefaultType);
     setParsedItems(multi);
 
-    // 2. Nếu chỉ có 1 giao dịch hoặc câu đơn
-    if (multi.length <= 1) {
-      if (multi.length === 1 && multi[0].isDebt) {
-        const item = multi[0];
-        if (item.amount) setAmount(formatAmountDisplay(item.amount));
-        if (item.note) setNote(item.note);
-        if (!userOverrodeType) {
-          setType(item.type);
-        }
-        setPerson(item.person || '');
-        if (item.date) setDate(item.date);
-        setCategory('Sổ nợ');
-        setDescription(item.description);
-        setPreview(null);
-        return;
+    // 2. Nếu có đúng 1 giao dịch hoặc câu đơn
+    if (multi.length === 1) {
+      const item = multi[0];
+      if (item.amount) setAmount(formatAmountDisplay(item.amount));
+      if (item.note) setNote(item.note);
+      if (!userOverrodeType) {
+        setType(item.type);
       }
+      if (item.isDebt) {
+        setPerson(item.person || '');
+        setCategory('Sổ nợ');
+      } else {
+        if (!category || category === 'Sổ nợ') {
+          setCategory(item.category);
+        }
+      }
+      if (item.date) setDate(item.date);
+      setDescription(item.description);
 
+      // Gọi server classifyPreview với mô tả của item
+      clearTimeout(previewTimer.current);
+      previewTimer.current = setTimeout(async () => {
+        const activeType = userOverrodeType
+          ? (type === 'income' ? 'income' : 'expense')
+          : (item.type === 'income' ? 'income' : 'expense');
+        const descForServer = item.description.trim();
+        if (!descForServer || item.isDebt) return;
+
+        try {
+          const p = await api.classifyPreview(descForServer, activeType);
+          if (p?.category && (!category || category === 'Sổ nợ')) {
+            setCategory(p.category);
+          }
+        } catch {
+          // Bỏ qua nếu lỗi mạng
+        }
+      }, 300);
+      setPreview(null);
+      return;
+    }
+
+    if (multi.length === 0) {
       const parsed = parseSmartInput(smartText);
       const clientDate = parseDateFromVietnameseText(parsed.description || smartText);
       const guessed = guessCategoryAndType(parsed.description || smartText);
