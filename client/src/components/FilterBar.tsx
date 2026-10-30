@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { api, formatDate, thisMonthRange, type FilterParams } from '../lib/api';
 import { Search, X, ChevronDown, Calendar, RotateCcw, HelpCircle, Sparkles } from 'lucide-react';
 
@@ -50,14 +51,12 @@ export default function FilterBar({ filters, onFiltersChange }: Props) {
   const [showCatMenu, setShowCatMenu] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const catRef = useRef<HTMLDivElement>(null);
-  const helpRef = useRef<HTMLDivElement>(null);
   const activeQuick = detectActiveQuick(filters);
 
-  // Đóng dropdown & tooltip khi click ra ngoài
+  // Đóng dropdown danh mục khi click ra ngoài
   useEffect(() => {
     function onClick(e: MouseEvent) {
       if (catRef.current && !catRef.current.contains(e.target as Node)) setShowCatMenu(false);
-      if (helpRef.current && !helpRef.current.contains(e.target as Node)) setShowHelp(false);
     }
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
@@ -193,15 +192,12 @@ export default function FilterBar({ filters, onFiltersChange }: Props) {
             )}
 
             {/* Icon dấu hỏi tròn nhỏ (?) */}
-            <div
-              ref={helpRef}
-              className="relative inline-flex items-center"
-            >
+            <div className="inline-flex items-center">
               <button
                 type="button"
                 onClick={e => {
                   e.stopPropagation();
-                  setShowHelp(prev => !prev);
+                  setShowHelp(true);
                 }}
                 className="p-1 rounded-full text-slate-400 hover:text-blue-600 dark:text-zinc-400 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-zinc-700/70 transition-colors focus:outline-none cursor-pointer"
                 title="Gợi ý cách tìm kiếm"
@@ -210,111 +206,109 @@ export default function FilterBar({ filters, onFiltersChange }: Props) {
                 <HelpCircle className="w-4 h-4" />
               </button>
 
-              {/* Tooltip / Popover gợi ý cách tìm kiếm */}
-              {showHelp && (
-                <>
-                  {/* Backdrop mờ trên mobile để chạm ra ngoài là đóng */}
+              {/* Modal gợi ý cách tìm kiếm hiển thị qua Portal để không bao giờ bị tràn/ép hẹp */}
+              {showHelp && createPortal(
+                <div
+                  className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+                  onClick={() => setShowHelp(false)}
+                >
                   <div
-                    className="fixed inset-0 z-40 bg-slate-900/40 dark:bg-black/60 sm:hidden backdrop-blur-2xs"
-                    onClick={e => {
-                      e.stopPropagation();
-                      setShowHelp(false);
-                    }}
-                  />
-
-                  {/* Panel nội dung: Modal căn giữa màn hình trên Mobile, Popover thả xuống dưới ô tìm kiếm trên Desktop */}
-                  <div
-                    className="fixed sm:absolute z-50 inset-x-3 top-1/2 -translate-y-1/2 sm:inset-x-auto sm:right-0 sm:top-full sm:translate-y-0 sm:mt-2 w-auto sm:w-80 max-w-sm sm:max-w-none mx-auto sm:mx-0 bg-white dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-700/90 rounded-2xl shadow-2xl p-4 text-xs text-slate-700 dark:text-zinc-200 animate-in fade-in zoom-in-95 duration-150 select-none max-h-[85vh] overflow-y-auto"
+                    className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl shadow-2xl p-4 sm:p-5 max-w-md w-full max-h-[85vh] overflow-y-auto space-y-3 animate-in zoom-in-95 duration-150"
                     onClick={e => e.stopPropagation()}
                   >
-                    {/* Mũi tên nhọn hướng lên icon ? trên màn hình desktop */}
-                    <div className="hidden sm:block absolute -top-1.5 right-2 w-3 h-3 bg-white dark:bg-zinc-900 border-l border-t border-slate-200/90 dark:border-zinc-700/90 rotate-45" />
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-zinc-800">
+                      <span className="font-bold text-slate-900 dark:text-zinc-100 flex items-center gap-1.5 text-sm">
+                        <Sparkles className="w-4 h-4 text-blue-500" />
+                        Gợi ý cách tìm kiếm
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowHelp(false)}
+                        className="text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                        title="Đóng"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
 
-                    <div className="relative space-y-3">
-                      <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-zinc-800">
-                        <span className="font-bold text-slate-900 dark:text-zinc-100 flex items-center gap-1.5">
-                          <Sparkles className="w-3.5 h-3.5 text-blue-500" />
-                          Gợi ý cách tìm kiếm
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setShowHelp(false)}
-                          className="text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-                          title="Đóng"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
+                    {/* Mục 1: Theo tên / mô tả */}
+                    <div className="space-y-1.5">
+                      <div className="font-semibold text-slate-700 dark:text-zinc-300 flex items-center gap-1.5 text-xs">
+                        <span>📝</span>
+                        <span>Tìm theo tên/mô tả:</span>
                       </div>
-
-                      {/* Mục 1: Theo tên / mô tả */}
-                      <div className="space-y-1.5">
-                        <div className="font-semibold text-slate-700 dark:text-zinc-300 flex items-center gap-1">
-                          <span>📝</span>
-                          <span>Tìm theo tên/mô tả:</span>
-                        </div>
-                        <div className="flex flex-wrap gap-1.5 pl-4">
-                          {["cơm", "cafe", "đổ xăng"].map(item => (
-                            <button
-                              key={item}
-                              type="button"
-                              onClick={() => applySuggestion(item)}
-                              className="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-zinc-800 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950/60 dark:hover:text-blue-300 border border-slate-200/60 dark:border-zinc-700 text-[11px] font-medium transition-colors cursor-pointer"
-                              title={`Tìm "${item}"`}
-                            >
-                              '{item}'
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Mục 2: Theo số tiền */}
-                      <div className="space-y-1.5">
-                        <div className="font-semibold text-slate-700 dark:text-zinc-300 flex items-center gap-1">
-                          <span>💵</span>
-                          <span>Tìm theo số tiền:</span>
-                        </div>
-                        <div className="flex flex-wrap gap-1.5 pl-4">
-                          {["> 100k", "50k..200k", "< 500k"].map(item => (
-                            <button
-                              key={item}
-                              type="button"
-                              onClick={() => applySuggestion(item)}
-                              className="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-zinc-800 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950/60 dark:hover:text-blue-300 border border-slate-200/60 dark:border-zinc-700 text-[11px] font-medium transition-colors cursor-pointer"
-                              title={`Lọc số tiền ${item}`}
-                            >
-                              '{item}'
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Mục 3: Theo thời gian */}
-                      <div className="space-y-1.5">
-                        <div className="font-semibold text-slate-700 dark:text-zinc-300 flex items-center gap-1">
-                          <span>📅</span>
-                          <span>Tìm theo thời gian:</span>
-                        </div>
-                        <div className="flex flex-wrap gap-1.5 pl-4">
-                          {["tháng 10", "tuần này", "từ 01/10 đến nay"].map(item => (
-                            <button
-                              key={item}
-                              type="button"
-                              onClick={() => applySuggestion(item)}
-                              className="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-zinc-800 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950/60 dark:hover:text-blue-300 border border-slate-200/60 dark:border-zinc-700 text-[11px] font-medium transition-colors cursor-pointer"
-                              title={`Lọc thời gian ${item}`}
-                            >
-                              '{item}'
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="pt-1.5 border-t border-slate-100 dark:border-zinc-800 text-[10px] sm:text-[11px] text-slate-400 dark:text-zinc-400 italic">
-                        💡 Mẹo: Bấm vào từ gợi ý để lọc nhanh hoặc gõ trực tiếp tự nhiên!
+                      <div className="flex flex-wrap gap-1.5 pl-4">
+                        {["cơm", "cafe", "đổ xăng"].map(item => (
+                          <button
+                            key={item}
+                            type="button"
+                            onClick={() => {
+                              applySuggestion(item);
+                              setShowHelp(false);
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-zinc-800 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950/60 dark:hover:text-blue-300 border border-slate-200/60 dark:border-zinc-700 text-xs font-medium transition-colors cursor-pointer"
+                            title={`Tìm "${item}"`}
+                          >
+                            '{item}'
+                          </button>
+                        ))}
                       </div>
                     </div>
+
+                    {/* Mục 2: Theo số tiền */}
+                    <div className="space-y-1.5">
+                      <div className="font-semibold text-slate-700 dark:text-zinc-300 flex items-center gap-1.5 text-xs">
+                        <span>💵</span>
+                        <span>Tìm theo số tiền:</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 pl-4">
+                        {["> 100k", "50k..200k", "< 500k"].map(item => (
+                          <button
+                            key={item}
+                            type="button"
+                            onClick={() => {
+                              applySuggestion(item);
+                              setShowHelp(false);
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-zinc-800 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950/60 dark:hover:text-blue-300 border border-slate-200/60 dark:border-zinc-700 text-xs font-medium transition-colors cursor-pointer"
+                            title={`Lọc số tiền ${item}`}
+                          >
+                            '{item}'
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Mục 3: Theo thời gian */}
+                    <div className="space-y-1.5">
+                      <div className="font-semibold text-slate-700 dark:text-zinc-300 flex items-center gap-1.5 text-xs">
+                        <span>📅</span>
+                        <span>Tìm theo thời gian:</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 pl-4">
+                        {["tháng 10", "tuần này", "từ 01/10 đến nay"].map(item => (
+                          <button
+                            key={item}
+                            type="button"
+                            onClick={() => {
+                              applySuggestion(item);
+                              setShowHelp(false);
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-zinc-800 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950/60 dark:hover:text-blue-300 border border-slate-200/60 dark:border-zinc-700 text-xs font-medium transition-colors cursor-pointer"
+                            title={`Lọc thời gian ${item}`}
+                          >
+                            '{item}'
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-100 dark:border-zinc-800 text-xs text-slate-500 dark:text-zinc-400">
+                      💡 <strong>Mẹo:</strong> Bấm vào từ gợi ý để lọc nhanh hoặc gõ câu tự nhiên vào thanh tìm kiếm!
+                    </div>
                   </div>
-                </>
+                </div>,
+                document.body
               )}
             </div>
           </div>
