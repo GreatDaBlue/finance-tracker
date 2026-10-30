@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api, formatVND, formatDate, getUserDisplayName, type Transaction, type FilterParams, type User } from '../lib/api';
 import { getCategoryIcon } from '../lib/smartParser';
 import { exportToExcel, exportToCSV } from '../lib/exportUtils';
-import { Pencil, Trash2, X, Download, FileSpreadsheet, CheckCircle2 } from 'lucide-react';
+import { Pencil, Trash2, X, Download, FileSpreadsheet, CheckSquare, Square, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface Props {
@@ -12,6 +12,8 @@ interface Props {
   filters: FilterParams;
   user?: User | null;
   onDeleted: (id: number) => void;
+  onBatchDeleted?: (ids: number[]) => void;
+  onAllDeleted?: () => void;
   onUpdated: (t: Transaction) => void;
   onLoadMore: () => void;
 }
@@ -106,11 +108,31 @@ function EditModal({ t, onClose, onSaved }: { t: Transaction; onClose: () => voi
   );
 }
 
-export default function TransactionList({ transactions, total, loading, filters, user, onDeleted, onUpdated, onLoadMore }: Props) {
+export default function TransactionList({
+  transactions,
+  total,
+  loading,
+  filters,
+  user,
+  onDeleted,
+  onBatchDeleted,
+  onAllDeleted,
+  onUpdated,
+  onLoadMore
+}: Props) {
   const userName = getUserDisplayName(user);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+
+  // Chế độ chọn nhiều
+  const [isSelectMode, setIsSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [isBatchDeleting, setIsBatchDeleting] = useState(false);
+
+  // Modal xác nhận xóa sạch tất cả
+  const [showConfirmDeleteAll, setShowConfirmDeleteAll] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
 
   // Xuất ra file Excel (.xlsx)
   async function handleExportExcel() {
@@ -160,21 +182,87 @@ export default function TransactionList({ transactions, total, loading, filters,
     try {
       await api.deleteTransaction(id);
       onDeleted(id);
+      setSelectedIds(prev => prev.filter(item => item !== id));
     } finally {
       setDeletingId(null);
     }
   }
 
+  function toggleSelect(id: number) {
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  }
+
+  const isAllDisplayedSelected =
+    transactions.length > 0 && transactions.every(t => selectedIds.includes(t.id));
+
+  function handleToggleSelectAllDisplayed() {
+    if (isAllDisplayedSelected) {
+      const currentIds = new Set(transactions.map(t => t.id));
+      setSelectedIds(prev => prev.filter(id => !currentIds.has(id)));
+    } else {
+      const currentIds = transactions.map(t => t.id);
+      setSelectedIds(prev => Array.from(new Set([...prev, ...currentIds])));
+    }
+  }
+
+  async function handleBatchDelete() {
+    if (selectedIds.length === 0) return;
+    if (!window.confirm(`Bạn có chắc chắn muốn xóa ${selectedIds.length} giao dịch đã chọn không?`)) {
+      return;
+    }
+
+    setIsBatchDeleting(true);
+    try {
+      await api.deleteTransactionsBatch(selectedIds);
+      onBatchDeleted?.(selectedIds);
+      setSelectedIds([]);
+      setIsSelectMode(false);
+    } catch (err) {
+      alert('Không thể xóa các giao dịch đã chọn. Vui lòng thử lại!');
+    } finally {
+      setIsBatchDeleting(false);
+    }
+  }
+
+  async function handleConfirmDeleteAll() {
+    setIsDeletingAll(true);
+    try {
+      await api.deleteAllTransactions(filters);
+      onAllDeleted?.();
+      setShowConfirmDeleteAll(false);
+      setSelectedIds([]);
+      setIsSelectMode(false);
+    } catch (err) {
+      alert('Không thể xóa sạch giao dịch. Vui lòng thử lại!');
+    } finally {
+      setIsDeletingAll(false);
+    }
+  }
+
+  // Trạng thái đang tải dữ liệu ban đầu
   if (loading && transactions.length === 0) {
     return (
       <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 p-8 text-center text-slate-400 dark:text-zinc-500 transition-colors">
         <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-3" />
-        Đang tải...
+        Đang tải giao dịch...
       </div>
     );
   }
 
-  if (transactions.length === 0) {
+  // Khi danh sách hiển thị tạm thời hết nhưng DB vẫn còn giao dịch (tránh bug hiện rỗng sai)
+  if (transactions.length === 0 && total > 0) {
+    return (
+      <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 p-8 text-center text-slate-400 dark:text-zinc-500 transition-colors">
+        <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-3" />
+        Đang tải các giao dịch tiếp theo ({total} giao dịch)...
+      </div>
+    );
+  }
+
+  // Khi thực sự không còn giao dịch nào trong DB
+  if (transactions.length === 0 && total === 0) {
     return (
       <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 p-12 text-center transition-colors">
         <p className="text-4xl mb-3">📭</p>
@@ -186,13 +274,45 @@ export default function TransactionList({ transactions, total, loading, filters,
 
   return (
     <div className="space-y-3">
-      {/* Thanh công cụ: Đếm số lượng & Nút Xuất file Excel (.xlsx) / CSV */}
+      {/* Thanh công cụ: Đếm số lượng, Chọn nhiều, Xóa sạch & Xuất file */}
       <div className="flex flex-wrap items-center justify-between gap-2 px-1">
         <span className="text-xs text-slate-500 dark:text-zinc-400 font-medium">
           Hiển thị <strong className="text-slate-800 dark:text-zinc-200">{transactions.length}</strong> / {total} giao dịch
         </span>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {/* Nút Chọn nhiều */}
+          <button
+            type="button"
+            onClick={() => {
+              setIsSelectMode(!isSelectMode);
+              if (isSelectMode) setSelectedIds([]);
+            }}
+            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-colors cursor-pointer shadow-2xs ${
+              isSelectMode
+                ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
+                : 'bg-white dark:bg-zinc-800 border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-200 hover:bg-slate-50 dark:hover:bg-zinc-700'
+            }`}
+            title="Bật chế độ chọn nhiều để xóa hàng loạt"
+          >
+            <CheckSquare className="w-3.5 h-3.5" />
+            <span>{isSelectMode ? 'Hủy chọn' : 'Chọn nhiều'}</span>
+          </button>
+
+          {/* Nút Xóa sạch ({total}) */}
+          {total > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowConfirmDeleteAll(true)}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
+              title="Xóa tất cả giao dịch"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+              <span>Xóa sạch ({total})</span>
+            </button>
+          )}
+
+          {/* Xuất file Excel (.xlsx) */}
           <button
             type="button"
             onClick={handleExportExcel}
@@ -201,9 +321,10 @@ export default function TransactionList({ transactions, total, loading, filters,
             title="Xuất toàn bộ giao dịch ra file Excel (.xlsx)"
           >
             <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-            <span>{isExporting ? 'Đang xuất...' : 'Xuất Excel (.xlsx)'}</span>
+            <span>{isExporting ? 'Đang xuất...' : 'Xuất Excel'}</span>
           </button>
 
+          {/* Xuất CSV */}
           <button
             type="button"
             onClick={handleExportCSV}
@@ -216,6 +337,56 @@ export default function TransactionList({ transactions, total, loading, filters,
           </button>
         </div>
       </div>
+
+      {/* Banner thanh tác vụ khi đang ở Chế độ Chọn nhiều */}
+      {isSelectMode && (
+        <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 rounded-2xl">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleToggleSelectAllDisplayed}
+              className="text-xs font-semibold text-blue-700 dark:text-blue-300 hover:underline cursor-pointer flex items-center gap-1"
+            >
+              {isAllDisplayedSelected ? (
+                <>
+                  <CheckSquare className="w-4 h-4 text-blue-600 dark:text-blue-400" /> Bỏ chọn ({transactions.length})
+                </>
+              ) : (
+                <>
+                  <Square className="w-4 h-4 text-blue-600 dark:text-blue-400" /> Chọn tất cả ({transactions.length})
+                </>
+              )}
+            </button>
+            <span className="text-xs text-slate-600 dark:text-zinc-400">
+              Đã chọn: <strong className="text-blue-600 dark:text-blue-400 font-bold">{selectedIds.length}</strong>
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleBatchDelete}
+              disabled={selectedIds.length === 0 || isBatchDeleting}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-xs disabled:opacity-40 transition-colors cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>{isBatchDeleting ? 'Đang xóa...' : `Xóa ${selectedIds.length} mục đã chọn`}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsSelectMode(false);
+                setSelectedIds([]);
+              }}
+              className="px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+            >
+              Đóng
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Danh sách giao dịch gom nhóm theo ngày */}
       {dates.map(date => {
         const dayTxns = grouped[date];
         const dayIncome = dayTxns.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
@@ -235,70 +406,91 @@ export default function TransactionList({ transactions, total, loading, filters,
             {/* Transactions with Framer Motion slide-in */}
             <div className="divide-y divide-slate-50 dark:divide-zinc-800/70">
               <AnimatePresence initial={false}>
-                {dayTxns.map((t) => (
-                  <motion.div
-                    key={t.id}
-                    initial={{ opacity: 0, y: -8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.96 }}
-                    transition={{ duration: 0.2, ease: 'easeOut' }}
-                    className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50/80 dark:hover:bg-zinc-800/50 group transition-colors"
-                  >
-                    {/* Icon */}
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0 ${
-                      t.type === 'income' ? 'bg-emerald-50 dark:bg-emerald-950/60' : 'bg-rose-50 dark:bg-rose-950/60'
-                    }`}>
-                      {getCategoryIcon(t.category) || CATEGORY_ICONS[t.category] || '❓'}
-                    </div>
+                {dayTxns.map((t) => {
+                  const isSelected = selectedIds.includes(t.id);
+                  return (
+                    <motion.div
+                      key={t.id}
+                      initial={{ opacity: 0, y: -8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.96 }}
+                      transition={{ duration: 0.2, ease: 'easeOut' }}
+                      onClick={() => {
+                        if (isSelectMode) toggleSelect(t.id);
+                      }}
+                      className={`flex items-center gap-3 px-4 py-3 hover:bg-slate-50/80 dark:hover:bg-zinc-800/50 group transition-colors ${
+                        isSelectMode ? 'cursor-pointer' : ''
+                      } ${isSelected ? 'bg-blue-50/60 dark:bg-blue-950/30' : ''}`}
+                    >
+                      {/* Checkbox khi bật Chọn nhiều */}
+                      {isSelectMode && (
+                        <div className="shrink-0 -mr-1">
+                          {isSelected ? (
+                            <CheckSquare className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                          ) : (
+                            <Square className="w-5 h-5 text-slate-300 dark:text-zinc-600" />
+                          )}
+                        </div>
+                      )}
 
-                    {/* Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <p className="text-sm font-semibold text-slate-800 dark:text-zinc-100 leading-snug break-words">
-                          {t.description}
-                        </p>
-                        {t.note?.includes('[Định kỳ hàng tháng]') && (
-                          <span className="text-[10px] bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-1.5 py-0.2 rounded font-semibold flex items-center gap-0.5">
-                            🔁 Lặp lại
-                          </span>
-                        )}
+                      {/* Icon */}
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0 ${
+                        t.type === 'income' ? 'bg-emerald-50 dark:bg-emerald-950/60' : 'bg-rose-50 dark:bg-rose-950/60'
+                      }`}>
+                        {getCategoryIcon(t.category) || CATEGORY_ICONS[t.category] || '❓'}
                       </div>
-                      <p className="text-xs text-slate-500 dark:text-zinc-400 font-medium mt-0.5 leading-relaxed break-words">
-                        {t.category}{t.note ? ` · ${t.note.replace('[Định kỳ hàng tháng]', '').trim()}` : ''}
-                      </p>
-                    </div>
 
-                    {/* Amount */}
-                    <div className="text-right flex-shrink-0">
-                      <p className={`text-sm sm:text-base font-bold tracking-tight tabular-nums ${t.type === 'income' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
-                        {t.type === 'income' ? '+' : '-'}{formatVND(t.amount)}
-                      </p>
-                    </div>
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="text-sm font-semibold text-slate-800 dark:text-zinc-100 leading-snug break-words">
+                            {t.description}
+                          </p>
+                          {t.note?.includes('[Định kỳ hàng tháng]') && (
+                            <span className="text-[10px] bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-1.5 py-0.2 rounded font-semibold flex items-center gap-0.5">
+                              🔁 Lặp lại
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-zinc-400 font-medium mt-0.5 leading-relaxed break-words">
+                          {t.category}{t.note ? ` · ${t.note.replace('[Định kỳ hàng tháng]', '').trim()}` : ''}
+                        </p>
+                      </div>
 
-                    {/* Actions (Vùng chạm tối ưu trên Mobile, hover trên Desktop) */}
-                    <div className="flex items-center gap-0.5 sm:gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                      <button
-                        type="button"
-                        onClick={() => setEditingId(t.id)}
-                        className="p-2 sm:p-1.5 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-950/70 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 active:scale-90 transition-all cursor-pointer"
-                        title="Chỉnh sửa giao dịch"
-                        aria-label="Chỉnh sửa giao dịch"
-                      >
-                        <Pencil className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(t.id)}
-                        disabled={deletingId === t.id}
-                        className="p-2 sm:p-1.5 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/70 text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 active:scale-90 transition-all cursor-pointer disabled:opacity-50"
-                        title="Xóa giao dịch"
-                        aria-label="Xóa giao dịch"
-                      >
-                        <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
-                      </button>
-                    </div>
-                  </motion.div>
-                ))}
+                      {/* Amount */}
+                      <div className="text-right flex-shrink-0">
+                        <p className={`text-sm sm:text-base font-bold tracking-tight tabular-nums ${t.type === 'income' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
+                          {t.type === 'income' ? '+' : '-'}{formatVND(t.amount)}
+                        </p>
+                      </div>
+
+                      {/* Actions (Vùng chạm tối ưu trên Mobile, hover trên Desktop) */}
+                      {!isSelectMode && (
+                        <div className="flex items-center gap-0.5 sm:gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                          <button
+                            type="button"
+                            onClick={() => setEditingId(t.id)}
+                            className="p-2 sm:p-1.5 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-950/70 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 active:scale-90 transition-all cursor-pointer"
+                            title="Chỉnh sửa giao dịch"
+                            aria-label="Chỉnh sửa giao dịch"
+                          >
+                            <Pencil className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(t.id)}
+                            disabled={deletingId === t.id}
+                            className="p-2 sm:p-1.5 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/70 text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 active:scale-90 transition-all cursor-pointer disabled:opacity-50"
+                            title="Xóa giao dịch"
+                            aria-label="Xóa giao dịch"
+                          >
+                            <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </motion.div>
+                  );
+                })}
               </AnimatePresence>
             </div>
           </div>
@@ -316,12 +508,74 @@ export default function TransactionList({ transactions, total, loading, filters,
         </button>
       )}
 
+      {/* Modal Chỉnh sửa */}
       {editingId !== null && (
         <EditModal
           t={transactions.find(t => t.id === editingId)!}
           onClose={() => setEditingId(null)}
           onSaved={t => { onUpdated(t); setEditingId(null); }}
         />
+      )}
+
+      {/* Modal xác nhận Xóa sạch tất cả giao dịch */}
+      {showConfirmDeleteAll && (
+        <div
+          className="fixed inset-0 bg-black/60 dark:bg-black/80 flex items-center justify-center z-50 p-4"
+          onClick={() => !isDeletingAll && setShowConfirmDeleteAll(false)}
+        >
+          <div
+            className="bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-slate-100 dark:border-zinc-800 w-full max-w-md p-6 space-y-4"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-rose-100 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-zinc-100">
+                  Xác nhận xóa sạch giao dịch
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                  Xóa tất cả các bản ghi giao dịch
+                </p>
+              </div>
+            </div>
+
+            <p className="text-sm text-slate-600 dark:text-zinc-300 leading-relaxed">
+              Bạn có chắc chắn muốn xóa toàn bộ <strong className="text-rose-600 dark:text-rose-400 font-bold">{total} giao dịch</strong> không?
+              Hành động này sẽ xóa vĩnh viễn và <span className="font-semibold text-rose-600 dark:text-rose-400">không thể khôi phục</span>!
+            </p>
+
+            <div className="flex gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowConfirmDeleteAll(false)}
+                disabled={isDeletingAll}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-sm font-medium text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteAll}
+                disabled={isDeletingAll}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold shadow-xs transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                {isDeletingAll ? (
+                  <>
+                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                    <span>Đang xóa...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Xác nhận xóa sạch</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

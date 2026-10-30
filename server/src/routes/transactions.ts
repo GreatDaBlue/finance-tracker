@@ -239,6 +239,54 @@ router.put('/:id', requireAuth, async (req: AuthenticatedRequest, res: Response)
   return res.json(result);
 });
 
+// ── DELETE /api/transactions/batch ────────────────────────────────────────
+router.delete('/batch', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.id;
+  const { ids } = req.body as { ids?: number[] };
+  if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: 'Danh sách ID cần xóa không hợp lệ' });
+  }
+
+  const placeholders = ids.map(() => '?').join(',');
+  const query = `DELETE FROM transactions WHERE user_id = ? AND id IN (${placeholders})`;
+  const result = await db.prepare(query).run(userId, ...ids);
+
+  return res.json({ success: true, count: result.changes });
+});
+
+// ── DELETE /api/transactions/all ──────────────────────────────────────────
+router.delete('/all', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.id;
+  const { dateFrom, dateTo, type, category, search } = (req.body || {}) as any;
+
+  let sql = 'DELETE FROM transactions WHERE user_id = ?';
+  const params: any[] = [userId];
+
+  if (dateFrom) {
+    sql += ' AND date >= ?';
+    params.push(dateFrom);
+  }
+  if (dateTo) {
+    sql += ' AND date <= ?';
+    params.push(dateTo);
+  }
+  if (type) {
+    sql += ' AND type = ?';
+    params.push(type);
+  }
+  if (category) {
+    sql += ' AND category = ?';
+    params.push(category);
+  }
+  if (search) {
+    sql += ' AND (description LIKE ? OR note LIKE ?)';
+    params.push(`%${search}%`, `%${search}%`);
+  }
+
+  const result = await db.prepare(sql).run(...params);
+  return res.json({ success: true, deletedCount: result.changes });
+});
+
 // ── DELETE /api/transactions/:id ──────────────────────────────────────────
 router.delete('/:id', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   const userId = req.user!.id;

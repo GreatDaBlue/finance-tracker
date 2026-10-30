@@ -402,6 +402,20 @@ export const api = {
     return request<{ success: boolean }>(`/transactions/${id}`, { method: 'DELETE' });
   },
 
+  deleteTransactionsBatch(ids: number[]): Promise<{ success: boolean; count: number }> {
+    return request<{ success: boolean; count: number }>('/transactions/batch', {
+      method: 'DELETE',
+      body: JSON.stringify({ ids })
+    });
+  },
+
+  deleteAllTransactions(filters: FilterParams = {}): Promise<{ success: boolean; deletedCount: number }> {
+    return request<{ success: boolean; deletedCount: number }>('/transactions/all', {
+      method: 'DELETE',
+      body: JSON.stringify(filters)
+    });
+  },
+
   classifyPreview(description: string, type: 'income' | 'expense'): Promise<ClassifyPreview> {
     return request<ClassifyPreview>('/transactions/classify', {
       method: 'POST',

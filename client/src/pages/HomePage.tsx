@@ -173,8 +173,37 @@ export default function HomePage() {
   }
 
   function handleDeleted(id: number) {
-    setTransactions(prev => prev.filter(t => t.id !== id));
-    setTotal(prev => prev - 1);
+    const next = transactions.filter(t => t.id !== id);
+    const nextTotal = Math.max(0, total - 1);
+    setTransactions(next);
+    setTotal(nextTotal);
+    setRefreshKey(k => k + 1);
+
+    // Nếu trang hiện tại không còn phần tử nào nhưng database vẫn còn giao dịch, tự động tải lại offset 0
+    if (next.length === 0 && nextTotal > 0) {
+      setOffset(0);
+      fetchTransactions(filters, 0, true);
+    }
+  }
+
+  function handleBatchDeleted(deletedIds: number[]) {
+    const idSet = new Set(deletedIds);
+    const next = transactions.filter(t => !idSet.has(t.id));
+    const nextTotal = Math.max(0, total - deletedIds.length);
+    setTransactions(next);
+    setTotal(nextTotal);
+    setRefreshKey(k => k + 1);
+
+    if (next.length === 0 && nextTotal > 0) {
+      setOffset(0);
+      fetchTransactions(filters, 0, true);
+    }
+  }
+
+  function handleAllDeleted() {
+    setTransactions([]);
+    setTotal(0);
+    setOffset(0);
     setRefreshKey(k => k + 1);
   }
 
@@ -371,6 +400,8 @@ export default function HomePage() {
                 filters={filters}
                 user={currentUser}
                 onDeleted={handleDeleted}
+                onBatchDeleted={handleBatchDeleted}
+                onAllDeleted={handleAllDeleted}
                 onUpdated={handleUpdated}
                 onLoadMore={handleLoadMore}
               />
