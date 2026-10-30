@@ -5,7 +5,7 @@ import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend
 } from 'recharts';
-import { TrendingUp, TrendingDown, Wallet, ArrowUpRight, ArrowDownRight, HelpCircle, CreditCard as CreditCardIcon, X } from 'lucide-react';
+import { TrendingUp, TrendingDown, Wallet, ArrowUpRight, ArrowDownRight, HelpCircle, CreditCard as CreditCardIcon, X, Calendar, ChevronDown } from 'lucide-react';
 
 interface Props {
   filters: FilterParams;
@@ -208,9 +208,38 @@ function getTimePeriodLabel(filters: FilterParams): string {
   return 'Tùy chọn';
 }
 
-export type DashboardQuickKey = 'today' | 'month' | 'quarter' | 'year';
+export type DashboardQuickKey = 'today' | 'month' | 'quarter' | 'year' | 'specific_month';
 
-export function getDashboardPeriodRange(key: DashboardQuickKey): { dateFrom: string; dateTo: string } {
+export function getAvailableMonths(): Array<{ value: string; label: string }> {
+  const list = [];
+  const now = new Date();
+  const curY = now.getFullYear();
+  const curM = now.getMonth() + 1;
+
+  // 12 tháng của năm hiện tại (từ tháng 12 ngược về tháng 1)
+  for (let m = 12; m >= 1; m--) {
+    const padM = String(m).padStart(2, '0');
+    const isCurrent = m === curM;
+    list.push({
+      value: `${curY}-${padM}`,
+      label: `Tháng ${m}/${curY}${isCurrent ? ' (Tháng này)' : ''}`
+    });
+  }
+
+  // 12 tháng của năm trước
+  const prevY = curY - 1;
+  for (let m = 12; m >= 1; m--) {
+    const padM = String(m).padStart(2, '0');
+    list.push({
+      value: `${prevY}-${padM}`,
+      label: `Tháng ${m}/${prevY}`
+    });
+  }
+
+  return list;
+}
+
+export function getDashboardPeriodRange(key: DashboardQuickKey, specificMonth?: string): { dateFrom: string; dateTo: string } {
   const now = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
   const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
@@ -227,12 +256,27 @@ export function getDashboardPeriodRange(key: DashboardQuickKey): { dateFrom: str
     const qStartMonth = Math.floor(m / 3) * 3 + 1; // 1, 4, 7, 10
     return { dateFrom: `${y}-${pad(qStartMonth)}-01`, dateTo: today };
   }
-  // year
+  if (key === 'year') {
+    return { dateFrom: `${y}-01-01`, dateTo: today };
+  }
+  if (key === 'specific_month' && specificMonth) {
+    const [sY, sM] = specificMonth.split('-').map(Number);
+    const lastDay = new Date(sY, sM, 0).getDate();
+    return {
+      dateFrom: `${sY}-${pad(sM)}-01`,
+      dateTo: `${sY}-${pad(sM)}-${pad(lastDay)}`
+    };
+  }
   return { dateFrom: `${y}-01-01`, dateTo: today };
 }
 
 export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Props) {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const defaultCurrentMonth = `${now.getFullYear()}-${pad(now.getMonth() + 1)}`;
+
   const [quickPeriod, setQuickPeriod] = useState<DashboardQuickKey>('month');
+  const [selectedMonth, setSelectedMonth] = useState<string>(defaultCurrentMonth);
   const [summary, setSummary] = useState<SummaryStats | null>(null);
   const [catStats, setCatStats] = useState<CategoryStat[]>([]);
   const [dateStats, setDateStats] = useState<DateStat[]>([]);
@@ -241,11 +285,13 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
   const [showRuleTooltip, setShowRuleTooltip] = useState(false);
   const [creditSummary, setCreditSummary] = useState<CreditCardSummary | null>(null);
 
+  const availableMonths = useRef(getAvailableMonths()).current;
+
   useEffect(() => {
     api.getCreditCards().then(res => setCreditSummary(res.summary)).catch(() => {});
   }, [refreshKey]);
 
-  const activePeriodRange = getDashboardPeriodRange(quickPeriod);
+  const activePeriodRange = getDashboardPeriodRange(quickPeriod, selectedMonth);
 
   useEffect(() => {
     // Chỉ bật skeleton loading khi chưa có dữ liệu nào trong RAM
@@ -278,7 +324,7 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
       setCatStats(c.filter(cat => cat.type === 'expense'));
       setDateStats(d);
     }).finally(() => setLoading(false));
-  }, [quickPeriod, chartGroup, refreshKey]);
+  }, [quickPeriod, selectedMonth, chartGroup, refreshKey]);
 
   if (loading && !summary) {
     return (
@@ -300,16 +346,16 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
 
   return (
     <div className="space-y-4">
-      {/* Nút Xem nhanh chu kỳ thời gian cho Tab Tổng quan (Hôm nay, Tháng này, Quý này, Năm nay) */}
+      {/* Nút Xem nhanh chu kỳ thời gian cho Tab Tổng quan (Hôm nay, Tháng này, Quý này, Năm nay & Chọn từng tháng) */}
       <div className="flex items-center gap-2 p-2.5 sm:p-3 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-100 dark:border-zinc-800 shadow-2xs flex-wrap transition-colors">
-        <span className="text-xs font-medium text-slate-400 dark:text-zinc-500 mr-1">Xem nhanh:</span>
+        <span className="text-xs font-medium text-slate-400 dark:text-zinc-500 mr-1 shrink-0">Xem nhanh:</span>
         <button
           type="button"
           onClick={() => {
             setQuickPeriod('today');
             setChartGroup('day');
           }}
-          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border ${
+          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border cursor-pointer ${
             quickPeriod === 'today'
               ? 'bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-500/20'
               : 'border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-700'
@@ -323,7 +369,7 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
             setQuickPeriod('month');
             setChartGroup('month');
           }}
-          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border ${
+          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border cursor-pointer ${
             quickPeriod === 'month'
               ? 'bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-500/20'
               : 'border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-700'
@@ -337,7 +383,7 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
             setQuickPeriod('quarter');
             setChartGroup('month');
           }}
-          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border ${
+          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border cursor-pointer ${
             quickPeriod === 'quarter'
               ? 'bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-500/20'
               : 'border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-700'
@@ -351,7 +397,7 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
             setQuickPeriod('year');
             setChartGroup('month');
           }}
-          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border ${
+          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border cursor-pointer ${
             quickPeriod === 'year'
               ? 'bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-500/20'
               : 'border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-700'
@@ -359,6 +405,46 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
         >
           Năm nay
         </button>
+
+        {/* Chỗ xổ xuống để chọn từng tháng cụ thể */}
+        <div className="relative inline-flex items-center">
+          <Calendar className={`w-3.5 h-3.5 absolute left-2.5 pointer-events-none transition-colors ${
+            quickPeriod === 'specific_month' ? 'text-white' : 'text-slate-400 dark:text-zinc-500'
+          }`} />
+          <select
+            value={quickPeriod === 'specific_month' ? selectedMonth : ''}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (val) {
+                setSelectedMonth(val);
+                setQuickPeriod('specific_month');
+                setChartGroup('day');
+              }
+            }}
+            aria-label="Chọn từng tháng"
+            className={`pl-8 pr-7 py-1.5 rounded-xl text-xs font-semibold border transition-all appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/30 ${
+              quickPeriod === 'specific_month'
+                ? 'bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-500/20'
+                : 'bg-white dark:bg-zinc-800 border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-200 hover:bg-slate-50 dark:hover:bg-zinc-700'
+            }`}
+          >
+            <option value="" disabled className="text-slate-400 dark:text-zinc-500 bg-white dark:bg-zinc-800">
+              Chọn từng tháng...
+            </option>
+            {availableMonths.map(m => (
+              <option
+                key={m.value}
+                value={m.value}
+                className="text-slate-800 dark:text-zinc-100 bg-white dark:bg-zinc-800"
+              >
+                {m.label}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className={`w-3.5 h-3.5 absolute right-2 pointer-events-none transition-colors ${
+            quickPeriod === 'specific_month' ? 'text-white' : 'text-slate-400 dark:text-zinc-500'
+          }`} />
+        </div>
       </div>
       {/* Banner Cảnh báo Thẻ tín dụng sắp đến hạn / quá hạn */}
       {creditSummary && (creditSummary.overdueCount > 0 || creditSummary.dueSoonCount > 0) && (
