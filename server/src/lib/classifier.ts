@@ -92,6 +92,43 @@ export async function layIconDanhMuc(tenDanhMuc: string): Promise<string> {
   return row?.icon ?? '🏷️';
 }
 
+/**
+ * Trả về danh sách tất cả các tên gọi tương đương của một danh mục.
+ * Ví dụ:
+ *   "Thực phẩm & Ăn uống" -> ["Thực phẩm & Ăn uống", "Ăn uống", "Thực phẩm", "Đồ ăn", "Tiền ăn"]
+ *   "Ăn uống"            -> ["Ăn uống", "Thực phẩm & Ăn uống", "Thực phẩm", "Đồ ăn", "Tiền ăn"]
+ */
+export function getEquivalentCategories(categoryName: string): string[] {
+  if (!categoryName) return [];
+  const trimmed = categoryName.trim();
+  const lower = trimmed.toLowerCase();
+
+  const GROUPS: string[][] = [
+    ['Ăn uống', 'Thực phẩm & Ăn uống', 'Thực phẩm', 'Đồ ăn', 'Tiền ăn'],
+    ['Xe cộ', 'Xe cộ & Đi lại', 'Di chuyển & Xăng xe', 'Xăng xe', 'Di chuyển'],
+    ['Sức khỏe', 'Sức khỏe & Y tế', 'Y tế & Sức khỏe', 'Y tế'],
+    ['Nhà cửa', 'Nhà cửa & Hóa đơn', 'Nhà ở & Tiện ích', 'Nhà ở', 'Tiền nhà'],
+    ['Mua sắm & Giải trí', 'Giải trí & Mua sắm', 'Mua sắm', 'Giải trí'],
+    ['Giáo dục', 'Giáo dục & Học tập', 'Học tập', 'Học phí'],
+    ['Thu nhập lương', 'Lương', 'Thu nhập từ lương'],
+    ['Thu nhập khác', 'Được tặng & Cho', 'Thưởng', 'Tiền thưởng'],
+    ['Tiết kiệm & Đầu tư', 'Đầu tư', 'Tiết kiệm'],
+    ['Sửa chữa & Bảo trì', 'Bảo trì', 'Sửa chữa'],
+    ['Khác']
+  ];
+
+  for (const group of GROUPS) {
+    const isMatch = group.some(item => item.toLowerCase() === lower);
+    if (isMatch) {
+      // Đảm bảo tên danh mục gốc được xếp đầu tiên
+      const remaining = group.filter(item => item.toLowerCase() !== lower);
+      return [trimmed, ...remaining];
+    }
+  }
+
+  return [trimmed];
+}
+
 function chuanHoaVanBan(text: string): string {
   return text
     .toLowerCase()

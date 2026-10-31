@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { api, formatDate, thisMonthRange, type FilterParams } from '../lib/api';
+import { getAllCategories } from '../lib/customCategories';
+import { getCategoryIcon } from '../lib/smartParser';
 import { Search, X, ChevronDown, Calendar, RotateCcw, HelpCircle, Sparkles } from 'lucide-react';
 
 interface Props {
@@ -8,18 +10,20 @@ interface Props {
   onFiltersChange: (f: FilterParams) => void;
 }
 
-const DANH_MUC = [
-  { name: 'Thực phẩm & Ăn uống', icon: '🍔' },
-  { name: 'Nhà ở & Tiện ích', icon: '🏠' },
-  { name: 'Di chuyển & Xăng xe', icon: '🚗' },
-  { name: 'Y tế & Sức khỏe', icon: '🏥' },
-  { name: 'Giải trí & Mua sắm', icon: '🎬' },
-  { name: 'Giáo dục', icon: '📚' },
-  { name: 'Thu nhập lương', icon: '💼' },
+const DEFAULT_FILTER_CATEGORIES = [
+  { name: 'Ăn uống', icon: '🍜' },
+  { name: 'Xe cộ & Đi lại', icon: '🛵' },
+  { name: 'Sức khỏe & Y tế', icon: '💊' },
+  { name: 'Nhà cửa & Hóa đơn', icon: '🏠' },
+  { name: 'Mua sắm & Giải trí', icon: '🛍️' },
+  { name: 'Giáo dục & Học tập', icon: '📚' },
+  { name: 'Thu nhập lương', icon: '💵' },
   { name: 'Thu nhập khác', icon: '💰' },
-  { name: 'Tiết kiệm & Đầu tư', icon: '💳' },
+  { name: 'Tiết kiệm & Đầu tư', icon: '📈' },
+  { name: 'Quà tặng & Cho biếu', icon: '🎁' },
+  { name: 'Được tặng & Cho', icon: '🎁' },
   { name: 'Sửa chữa & Bảo trì', icon: '🔧' },
-  { name: 'Khác', icon: '❓' },
+  { name: 'Khác', icon: '🏷️' },
 ];
 
 function homNay(): string {
@@ -60,6 +64,14 @@ export default function FilterBar({ filters, onFiltersChange }: Props) {
     }
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
+  }, []);
+
+  const availableCategories = React.useMemo(() => {
+    const custom = getAllCategories();
+    const map = new Map<string, string>();
+    for (const d of DEFAULT_FILTER_CATEGORIES) map.set(d.name, d.icon);
+    for (const c of custom) map.set(c.name, c.icon || getCategoryIcon(c.name));
+    return Array.from(map.entries()).map(([name, icon]) => ({ name, icon }));
   }, []);
 
   // Xử lý lệnh tự nhiên / tìm kiếm
@@ -384,7 +396,7 @@ export default function FilterBar({ filters, onFiltersChange }: Props) {
             }`}
           >
             {filters.category
-              ? `${DANH_MUC.find(c => c.name === filters.category)?.icon} ${filters.category}`
+              ? `${availableCategories.find(c => c.name === filters.category)?.icon || getCategoryIcon(filters.category)} ${filters.category}`
               : '🏷️ Danh mục'}
             <ChevronDown className="w-3.5 h-3.5" />
           </button>
@@ -400,7 +412,7 @@ export default function FilterBar({ filters, onFiltersChange }: Props) {
               >
                 Tất cả danh mục
               </button>
-              {DANH_MUC.map(cat => (
+              {availableCategories.map(cat => (
                 <button
                   key={cat.name}
                   type="button"

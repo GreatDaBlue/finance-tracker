@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { db } from '../lib/db';
-import { classify } from '../lib/classifier';
+import { classify, getEquivalentCategories } from '../lib/classifier';
 import { parseDateFromText, formatDate } from '../lib/dateParser';
 import { requireAuth, AuthenticatedRequest } from '../lib/auth';
 import { processRecurringForUser } from './recurring';
@@ -51,8 +51,15 @@ function buildTransactionWhere(userId: number, filters: TransactionFilters): { w
     params.push(filters.type);
   }
   if (filters.category) {
-    conditions.push('category = ?');
-    params.push(filters.category);
+    const equivs = getEquivalentCategories(filters.category);
+    if (equivs.length > 1) {
+      const placeholders = equivs.map(() => '?').join(', ');
+      conditions.push(`category IN (${placeholders})`);
+      params.push(...equivs);
+    } else {
+      conditions.push('category = ?');
+      params.push(filters.category);
+    }
   }
   if (filters.dateFrom) {
     conditions.push('date >= ?');

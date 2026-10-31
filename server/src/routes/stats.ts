@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { db } from '../lib/db';
 import { formatDate } from '../lib/dateParser';
 import { requireAuth, AuthenticatedRequest } from '../lib/auth';
+import { getEquivalentCategories } from '../lib/classifier';
 
 const router = Router();
 
@@ -236,8 +237,15 @@ function buildWhere(opts: FilterOpts): { where: string; params: unknown[] } {
     params.push(opts.type);
   }
   if (opts.category) {
-    conditions.push('category = ?');
-    params.push(opts.category);
+    const equivs = getEquivalentCategories(opts.category);
+    if (equivs.length > 1) {
+      const placeholders = equivs.map(() => '?').join(', ');
+      conditions.push(`category IN (${placeholders})`);
+      params.push(...equivs);
+    } else {
+      conditions.push('category = ?');
+      params.push(opts.category);
+    }
   }
   if (opts.dateFrom) {
     conditions.push('date >= ?');
