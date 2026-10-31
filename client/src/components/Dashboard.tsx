@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { api, formatVND, getUserDisplayName, type SummaryStats, type CategoryStat, type DateStat, type FilterParams, type User, type CreditCardSummary } from '../lib/api';
+import { getCategoryIcon } from '../lib/smartParser';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend
@@ -20,18 +21,36 @@ const COLORS = [
 ];
 
 const CATEGORY_ICONS: Record<string, string> = {
+  'Ăn uống': '🍜',
   'Thực phẩm & Ăn uống': '🍔',
-  'Nhà ở & Tiện ích': '🏠',
+  'Xe cộ': '🛵',
+  'Xe cộ & Đi lại': '🛵',
   'Di chuyển & Xăng xe': '🚗',
+  'Sức khỏe': '💊',
+  'Sức khỏe & Y tế': '💊',
   'Y tế & Sức khỏe': '🏥',
+  'Nhà cửa': '🏠',
+  'Nhà cửa & Hóa đơn': '🏠',
+  'Nhà ở & Tiện ích': '🏠',
+  'Mua sắm & Giải trí': '🛍️',
   'Giải trí & Mua sắm': '🎬',
   'Giáo dục': '📚',
-  'Thu nhập lương': '💼',
+  'Giáo dục & Học tập': '📚',
+  'Thu nhập lương': '💵',
+  'Lương': '💵',
+  'Quà tặng & Cho biếu': '🎁',
+  'Được tặng & Cho': '🎁',
   'Thu nhập khác': '💰',
-  'Tiết kiệm & Đầu tư': '💳',
+  'Tiết kiệm & Đầu tư': '📈',
   'Sửa chữa & Bảo trì': '🔧',
-  'Khác': '❓',
+  'Khác': '🏷️',
 };
+
+function getCategoryDisplayIcon(categoryName: string, itemIcon?: string): string {
+  if (itemIcon && itemIcon !== '❓') return itemIcon;
+  if (CATEGORY_ICONS[categoryName]) return CATEGORY_ICONS[categoryName];
+  return getCategoryIcon(categoryName);
+}
 
 function formatShortVND(val: number): string {
   if (val >= 1_000_000_000) return `${(val / 1_000_000_000).toFixed(1)}B`;
@@ -851,7 +870,7 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
                 {expenseCategories.map((cat, i) => (
                   <div key={cat.category} className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                    <span className="text-xs text-slate-600 dark:text-zinc-300 flex-1 truncate">{CATEGORY_ICONS[cat.category] ?? '❓'} {cat.category}</span>
+                    <span className="text-xs text-slate-600 dark:text-zinc-300 flex-1 truncate">{getCategoryDisplayIcon(cat.category, cat.icon)} {cat.category}</span>
                     <span className="text-xs font-medium text-slate-700 dark:text-zinc-300 flex-shrink-0">
                       {pieTotal > 0 ? Math.round((cat.total / pieTotal) * 100) : 0}%
                     </span>
@@ -952,7 +971,7 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
             {catStats.slice(0, 5).map((cat, i) => (
               <div key={cat.category} className="flex items-center gap-3">
                 <span className="text-slate-400 dark:text-zinc-500 text-xs w-4">{i + 1}</span>
-                <span className="text-lg">{CATEGORY_ICONS[cat.category] ?? '❓'}</span>
+                <span className="text-lg">{getCategoryDisplayIcon(cat.category, cat.icon)}</span>
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-sm text-slate-700 dark:text-zinc-300">{cat.category}</span>

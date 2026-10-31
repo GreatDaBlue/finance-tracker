@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { parseMultiSmartInput, parseAmountInput, formatAmountDisplay, parseBatchTransactions, parseSmartInput } from '../lib/smartParser';
+import { parseMultiSmartInput, parseAmountInput, formatAmountDisplay, parseBatchTransactions, parseSmartInput, getCategoryIcon } from '../lib/smartParser';
 import { formatVND } from '../lib/api';
 
 describe('QA Test Suite — Logic & Dữ liệu Biên (Calculations & Edge Cases)', () => {
@@ -205,6 +205,40 @@ khóa   155.000
       }
       // Số trần nhỏ ở cuối (không đơn vị) không được coi là tiền
       expect(parseBatchTransactions('14/08/2026 Mua 3 bánh 5').rows).toHaveLength(0);
+    });
+  });
+
+  describe('5. Rà soát & Đồng bộ hóa Toàn diện Danh mục & Icon trực quan', () => {
+    it('Đảm bảo tất cả các danh mục chuẩn và biến thể đều có icon trực quan rõ ràng, không bị ❓', () => {
+      const categoriesToCheck = [
+        { name: 'Ăn uống', expected: '🍜' },
+        { name: 'Thực phẩm & Ăn uống', expected: '🍜' },
+        { name: 'Xe cộ', expected: '🛵' },
+        { name: 'Xe cộ & Đi lại', expected: '🛵' },
+        { name: 'Di chuyển & Xăng xe', expected: '🛵' },
+        { name: 'Sức khỏe', expected: '💊' },
+        { name: 'Sức khỏe & Y tế', expected: '💊' },
+        { name: 'Y tế & Sức khỏe', expected: '💊' },
+        { name: 'Nhà cửa', expected: '🏠' },
+        { name: 'Nhà cửa & Hóa đơn', expected: '🏠' },
+        { name: 'Nhà ở & Tiện ích', expected: '🏠' },
+        { name: 'Mua sắm & Giải trí', expected: '🛍️' },
+        { name: 'Giải trí & Mua sắm', expected: '🛍️' },
+        { name: 'Giáo dục', expected: '📚' },
+        { name: 'Giáo dục & Học tập', expected: '📚' },
+        { name: 'Thu nhập lương', expected: '💵' },
+        { name: 'Quà tặng & Cho biếu', expected: '🎁' },
+        { name: 'Được tặng & Cho', expected: '🎁' },
+        { name: 'Thu nhập khác', expected: '💰' },
+        { name: 'Tiết kiệm & Đầu tư', expected: '📈' },
+        { name: 'Sửa chữa & Bảo trì', expected: '🔧' }
+      ];
+
+      for (const item of categoriesToCheck) {
+        const icon = getCategoryIcon(item.name);
+        expect(icon, `Icon cho danh mục ${item.name} không được là dấu hỏi`).not.toBe('❓');
+        expect(icon, `Icon cho danh mục ${item.name} phải là ${item.expected}`).toBe(item.expected);
+      }
     });
   });
 });

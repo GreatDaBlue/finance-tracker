@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { api, formatVND, getUserDisplayName, type BudgetResponse, type BudgetItem, type User } from '../lib/api';
 import { DANH_MUC, getCategoryIcon, parseAmountInput } from '../lib/smartParser';
+import { getAllCategories } from '../lib/customCategories';
 import { Target, AlertTriangle, AlertCircle, CheckCircle2, Plus, Trash2, Calendar, X, Sparkles, Repeat } from 'lucide-react';
 
 interface Props {
@@ -26,6 +27,20 @@ export default function BudgetManager({ refreshKey, onOpenRecurring, user }: Pro
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deletingBudgetId, setDeletingBudgetId] = useState<number | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  const availableCategories = useMemo(() => {
+    const custom = getAllCategories().filter(c => c.type !== 'income');
+    const map = new Map<string, string>();
+    for (const c of custom) {
+      map.set(c.name, c.icon || getCategoryIcon(c.name));
+    }
+    for (const d of DANH_MUC) {
+      if (!d.startsWith('Thu nhập') && !map.has(d)) {
+        map.set(d, getCategoryIcon(d));
+      }
+    }
+    return Array.from(map.entries()).map(([name, icon]) => ({ name, icon }));
+  }, []);
 
   async function loadBudgets() {
     setLoading(true);
@@ -391,9 +406,9 @@ export default function BudgetManager({ refreshKey, onOpenRecurring, user }: Pro
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs font-medium text-slate-800 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-400"
                 >
                   <option value="">🎯 Toàn bộ chi tiêu trong tháng (Tổng cả tháng)</option>
-                  {DANH_MUC.filter(c => !c.startsWith('Thu nhập')).map(c => (
-                    <option key={c} value={c}>
-                      {getCategoryIcon(c)} {c}
+                  {availableCategories.map(c => (
+                    <option key={c.name} value={c.name}>
+                      {c.icon} {c.name}
                     </option>
                   ))}
                 </select>

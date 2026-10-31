@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { db } from '../lib/db';
 import { formatDate } from '../lib/dateParser';
 import { requireAuth, AuthenticatedRequest } from '../lib/auth';
-import { getEquivalentCategories } from '../lib/classifier';
+import { getEquivalentCategories, getCanonicalCategory, layIconDanhMucSync } from '../lib/classifier';
 
 const router = Router();
 
@@ -152,15 +152,44 @@ router.get('/by-category', requireAuth, async (req: AuthenticatedRequest, res: R
   `).all<{ category: string; type: string; count: string | number; total: string | number }>(...params);
 
   const allCategories = await db.prepare('SELECT name, icon FROM categories').all<{ name: string; icon: string }>();
-  const iconMap = new Map(allCategories.map(c => [c.name, c.icon]));
+  const iconMap = new Map(allCategories.map(c => [c.name.toLowerCase(), c.icon]));
 
-  const withIcons = rows.map(r => ({
-    category: r.category,
-    type: r.type,
-    count: Number(r.count),
-    total: Number(r.total),
-    icon: iconMap.get(r.category) ?? '❓'
-  }));
+  // Gom các danh mục tương đương (ví dụ: 'Thực phẩm & Ăn uống' và 'Ăn uống') về cùng 1 danh mục chuẩn
+  const groupedMap = new Map<string, { category: string; type: string; count: number; total: number; icon: string }>();
+
+  for (const r of rows) {
+    const rawCat = (r.category || 'Khác').trim();
+    const canonical = getCanonicalCategory(rawCat);
+    const itemType = r.type || 'expense';
+    const key = `${canonical}_${itemType}`;
+    const count = Number(r.count || 0);
+    const total = Number(r.total || 0);
+    
+    // Tìm icon tốt nhất: từ database theo tên gốc -> tên canonical -> fallback hàm nhận diện thông minh
+    const icon = iconMap.get(rawCat.toLowerCase()) || 
+                 iconMap.get(canonical.toLowerCase()) || 
+                 layIconDanhMucSync(canonical);
+
+    if (groupedMap.has(key)) {
+      const existing = groupedMap.get(key)!;
+      existing.count += count;
+      existing.total += total;
+      // Nếu existing đang có icon mặc định mà dòng này có icon cụ thể thì cập nhật
+      if (existing.icon === '🏷️' && icon !== '🏷️') {
+        existing.icon = icon;
+      }
+    } else {
+      groupedMap.set(key, {
+        category: canonical,
+        type: itemType,
+        count,
+        total,
+        icon
+      });
+    }
+  }
+
+  const withIcons = Array.from(groupedMap.values()).sort((a, b) => b.total - a.total);
 
   res.json(withIcons);
 });
@@ -442,28 +471,37 @@ async function parseNaturalQuery(query: string): Promise<QueryResult> {
   }
 
   const categoryAliases: Record<string, string> = {
-    'ăn uống': 'Thực phẩm & Ăn uống',
-    'thực phẩm': 'Thực phẩm & Ăn uống',
-    'đồ ăn': 'Thực phẩm & Ăn uống',
-    'tiền ăn': 'Thực phẩm & Ăn uống',
-    'di chuyển': 'Di chuyển & Xăng xe',
-    'xăng xe': 'Di chuyển & Xăng xe',
-    'xe cộ': 'Di chuyển & Xăng xe',
-    'sức khỏe': 'Y tế & Sức khỏe',
-    'y tế': 'Y tế & Sức khỏe',
-    'giải trí': 'Giải trí & Mua sắm',
-    'mua sắm': 'Giải trí & Mua sắm',
-    'giáo dục': 'Giáo dục',
-    'học phí': 'Giáo dục',
+    'ăn uống': 'Ăn uống',
+    'thực phẩm': 'Ăn uống',
+    'đồ ăn': 'Ăn uống',
+    'tiền ăn': 'Ăn uống',
+    'di chuyển': 'Xe cộ & Đi lại',
+    'xăng xe': 'Xe cộ & Đi lại',
+    'xe cộ': 'Xe cộ & Đi lại',
+    'sức khỏe': 'Sức khỏe & Y tế',
+    'y tế': 'Sức khỏe & Y tế',
+    'giải trí': 'Mua sắm & Giải trí',
+    'mua sắm': 'Mua sắm & Giải trí',
+    'giáo dục': 'Giáo dục & Học tập',
+    'học tập': 'Giáo dục & Học tập',
+    'học phí': 'Giáo dục & Học tập',
     'tiết kiệm': 'Tiết kiệm & Đầu tư',
     'đầu tư': 'Tiết kiệm & Đầu tư',
     'sửa chữa': 'Sửa chữa & Bảo trì',
     'bảo trì': 'Sửa chữa & Bảo trì',
     'lương': 'Thu nhập lương',
     'tiền lương': 'Thu nhập lương',
-    'nhà ở': 'Nhà ở & Tiện ích',
-    'tiền nhà': 'Nhà ở & Tiện ích',
-    'điện nước': 'Nhà ở & Tiện ích',
+    'nhà ở': 'Nhà cửa & Hóa đơn',
+    'nhà cửa': 'Nhà cửa & Hóa đơn',
+    'tiền nhà': 'Nhà cửa & Hóa đơn',
+    'điện nước': 'Nhà cửa & Hóa đơn',
+    'quà tặng': 'Quà tặng & Cho biếu',
+    'cho biếu': 'Quà tặng & Cho biếu',
+    'biếu tặng': 'Quà tặng & Cho biếu',
+    'được tặng': 'Được tặng & Cho',
+    'được cho': 'Được tặng & Cho',
+    'thưởng': 'Thu nhập khác',
+    'tiền thưởng': 'Thu nhập khác',
   };
 
   if (!result.category) {
@@ -473,6 +511,10 @@ async function parseNaturalQuery(query: string): Promise<QueryResult> {
         break;
       }
     }
+  }
+
+  if (result.category) {
+    result.category = getCanonicalCategory(result.category);
   }
 
   return result;

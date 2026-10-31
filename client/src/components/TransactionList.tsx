@@ -22,19 +22,26 @@ const CATEGORY_ICONS: Record<string, string> = {
   'Ăn uống': '🍜',
   'Thực phẩm & Ăn uống': '🍔',
   'Xe cộ': '🛵',
+  'Xe cộ & Đi lại': '🛵',
   'Di chuyển & Xăng xe': '🚗',
   'Sức khỏe': '💊',
+  'Sức khỏe & Y tế': '💊',
   'Y tế & Sức khỏe': '🏥',
   'Nhà cửa': '🏠',
+  'Nhà cửa & Hóa đơn': '🏠',
   'Nhà ở & Tiện ích': '🏠',
   'Mua sắm & Giải trí': '🛍️',
   'Giải trí & Mua sắm': '🎬',
   'Giáo dục': '📚',
-  'Thu nhập lương': '💼',
+  'Giáo dục & Học tập': '📚',
+  'Thu nhập lương': '💵',
+  'Lương': '💵',
+  'Quà tặng & Cho biếu': '🎁',
+  'Được tặng & Cho': '🎁',
   'Thu nhập khác': '💰',
-  'Tiết kiệm & Đầu tư': '💳',
+  'Tiết kiệm & Đầu tư': '📈',
   'Sửa chữa & Bảo trì': '🔧',
-  'Khác': '❓',
+  'Khác': '🏷️',
 };
 
 function formatCompactVND(amount: number): string {
@@ -125,6 +132,7 @@ function EditModal({ t, onClose, onSaved }: { t: Transaction; onClose: () => voi
           <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-slate-800 dark:text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:light] dark:[color-scheme:dark]" />
           <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400">Danh mục</label>
           <select value={category} onChange={e => setCategory(e.target.value)} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-slate-800 dark:text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            {!Object.keys(CATEGORY_ICONS).includes(category) && category && <option value={category}>{category}</option>}
             {Object.keys(CATEGORY_ICONS).map(c => <option key={c} value={c}>{c}</option>)}
           </select>
           <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400">Ghi chú</label>

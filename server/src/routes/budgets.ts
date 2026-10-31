@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { db } from '../lib/db';
 import { requireAuth, AuthenticatedRequest } from '../lib/auth';
+import { getEquivalentCategories } from '../lib/classifier';
 
 const router = Router();
 
@@ -49,10 +50,11 @@ router.get('/', requireAuth, async (req: AuthenticatedRequest, res: Response) =>
       ).get<{ s: string | number }>(userId, `${month}%`);
       spent = Number(row?.s || 0);
     } else {
-      const cat = b.category;
+      const equivs = getEquivalentCategories(b.category);
+      const placeholders = equivs.map(() => '?').join(', ');
       const row = await db.prepare(
-        "SELECT SUM(amount) as s FROM transactions WHERE user_id = ? AND type = 'expense' AND (category = ? OR (category LIKE ? AND ? LIKE '%Ăn uống%') OR (category LIKE ? AND ? LIKE '%Xe cộ%') OR (category LIKE ? AND ? LIKE '%Sức khỏe%')) AND date LIKE ?"
-      ).get<{ s: string | number }>(userId, cat, '%Thực phẩm%', cat, '%Di chuyển%', cat, '%Y tế%', cat, `${month}%`);
+        `SELECT SUM(amount) as s FROM transactions WHERE user_id = ? AND type = 'expense' AND category IN (${placeholders}) AND date LIKE ?`
+      ).get<{ s: string | number }>(userId, ...equivs, `${month}%`);
       spent = Number(row?.s || 0);
     }
 

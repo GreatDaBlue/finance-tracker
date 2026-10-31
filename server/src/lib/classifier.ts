@@ -75,9 +75,10 @@ export async function classify(description: string, type: 'income' | 'expense'):
 }
 
 /**
- * Lấy icon của một danh mục theo tên.
+ * Lấy icon trực quan của một danh mục theo tên (đồng bộ).
  */
-export async function layIconDanhMuc(tenDanhMuc: string): Promise<string> {
+export function layIconDanhMucSync(tenDanhMuc: string): string {
+  if (!tenDanhMuc) return '🏷️';
   if (/Ăn uống|Thực phẩm/i.test(tenDanhMuc)) return '🍜';
   if (/Xe cộ|Di chuyển|Xăng/i.test(tenDanhMuc)) return '🛵';
   if (/Sức khỏe|Y tế/i.test(tenDanhMuc)) return '💊';
@@ -88,45 +89,114 @@ export async function layIconDanhMuc(tenDanhMuc: string): Promise<string> {
   if (/Quà|Tặng|Cho|Biếu/i.test(tenDanhMuc)) return '🎁';
   if (/Thu nhập/i.test(tenDanhMuc)) return '💰';
   if (/Tiết kiệm|Đầu tư/i.test(tenDanhMuc)) return '📈';
+  if (/Sửa chữa|Bảo trì/i.test(tenDanhMuc)) return '🔧';
+  return '🏷️';
+}
+
+/**
+ * Lấy icon của một danh mục theo tên.
+ */
+export async function layIconDanhMuc(tenDanhMuc: string): Promise<string> {
+  const syncIcon = layIconDanhMucSync(tenDanhMuc);
+  if (syncIcon !== '🏷️') return syncIcon;
   const row = await db.prepare('SELECT icon FROM categories WHERE name = ?').get<{ icon: string }>(tenDanhMuc);
   return row?.icon ?? '🏷️';
 }
 
+const CATEGORY_GROUPS: { canonical: string; aliases: string[] }[] = [
+  {
+    canonical: 'Ăn uống',
+    aliases: ['Ăn uống', 'Thực phẩm & Ăn uống', 'Thực phẩm', 'Đồ ăn', 'Tiền ăn', 'Ăn sáng', 'Ăn trưa', 'Ăn tối', 'Ăn vặt']
+  },
+  {
+    canonical: 'Xe cộ & Đi lại',
+    aliases: ['Xe cộ & Đi lại', 'Xe cộ', 'Di chuyển & Xăng xe', 'Xăng xe', 'Di chuyển', 'Đi lại', 'Xăng', 'Gửi xe']
+  },
+  {
+    canonical: 'Sức khỏe & Y tế',
+    aliases: ['Sức khỏe & Y tế', 'Sức khỏe', 'Y tế & Sức khỏe', 'Y tế', 'Thuốc men', 'Khám bệnh']
+  },
+  {
+    canonical: 'Nhà cửa & Hóa đơn',
+    aliases: ['Nhà cửa & Hóa đơn', 'Nhà cửa', 'Nhà ở & Tiện ích', 'Nhà ở', 'Tiền nhà', 'Điện nước', 'Hóa đơn']
+  },
+  {
+    canonical: 'Mua sắm & Giải trí',
+    aliases: ['Mua sắm & Giải trí', 'Giải trí & Mua sắm', 'Mua sắm', 'Giải trí', 'Mua sắm giải trí']
+  },
+  {
+    canonical: 'Giáo dục & Học tập',
+    aliases: ['Giáo dục & Học tập', 'Giáo dục', 'Học tập', 'Học phí', 'Sách vở']
+  },
+  {
+    canonical: 'Thu nhập lương',
+    aliases: ['Thu nhập lương', 'Lương', 'Tiền lương', 'Thu nhập từ lương']
+  },
+  {
+    canonical: 'Quà tặng & Cho biếu',
+    aliases: ['Quà tặng & Cho biếu', 'Quà tặng', 'Cho biếu', 'Biếu tặng', 'Lì xì', 'Từ thiện', 'Mừng cưới']
+  },
+  {
+    canonical: 'Được tặng & Cho',
+    aliases: ['Được tặng & Cho', 'Được cho', 'Được tặng', 'Lì xì nhận']
+  },
+  {
+    canonical: 'Thu nhập khác',
+    aliases: ['Thu nhập khác', 'Thưởng', 'Tiền thưởng', 'Trúng thưởng', 'Thu nhập ngoài']
+  },
+  {
+    canonical: 'Tiết kiệm & Đầu tư',
+    aliases: ['Tiết kiệm & Đầu tư', 'Đầu tư', 'Tiết kiệm', 'Đầu tư & Tiết kiệm']
+  },
+  {
+    canonical: 'Sửa chữa & Bảo trì',
+    aliases: ['Sửa chữa & Bảo trì', 'Bảo trì', 'Sửa chữa', 'Bảo dưỡng']
+  },
+  {
+    canonical: 'Khác',
+    aliases: ['Khác']
+  }
+];
+
 /**
  * Trả về danh sách tất cả các tên gọi tương đương của một danh mục.
  * Ví dụ:
- *   "Thực phẩm & Ăn uống" -> ["Thực phẩm & Ăn uống", "Ăn uống", "Thực phẩm", "Đồ ăn", "Tiền ăn"]
- *   "Ăn uống"            -> ["Ăn uống", "Thực phẩm & Ăn uống", "Thực phẩm", "Đồ ăn", "Tiền ăn"]
+ *   "Thực phẩm & Ăn uống" -> ["Thực phẩm & Ăn uống", "Ăn uống", "Thực phẩm", "Đồ ăn", ...]
+ *   "Ăn uống"            -> ["Ăn uống", "Thực phẩm & Ăn uống", "Thực phẩm", "Đồ ăn", ...]
  */
 export function getEquivalentCategories(categoryName: string): string[] {
   if (!categoryName) return [];
   const trimmed = categoryName.trim();
   const lower = trimmed.toLowerCase();
 
-  const GROUPS: string[][] = [
-    ['Ăn uống', 'Thực phẩm & Ăn uống', 'Thực phẩm', 'Đồ ăn', 'Tiền ăn'],
-    ['Xe cộ', 'Xe cộ & Đi lại', 'Di chuyển & Xăng xe', 'Xăng xe', 'Di chuyển'],
-    ['Sức khỏe', 'Sức khỏe & Y tế', 'Y tế & Sức khỏe', 'Y tế'],
-    ['Nhà cửa', 'Nhà cửa & Hóa đơn', 'Nhà ở & Tiện ích', 'Nhà ở', 'Tiền nhà'],
-    ['Mua sắm & Giải trí', 'Giải trí & Mua sắm', 'Mua sắm', 'Giải trí'],
-    ['Giáo dục', 'Giáo dục & Học tập', 'Học tập', 'Học phí'],
-    ['Thu nhập lương', 'Lương', 'Thu nhập từ lương'],
-    ['Thu nhập khác', 'Được tặng & Cho', 'Thưởng', 'Tiền thưởng'],
-    ['Tiết kiệm & Đầu tư', 'Đầu tư', 'Tiết kiệm'],
-    ['Sửa chữa & Bảo trì', 'Bảo trì', 'Sửa chữa'],
-    ['Khác']
-  ];
-
-  for (const group of GROUPS) {
-    const isMatch = group.some(item => item.toLowerCase() === lower);
+  for (const group of CATEGORY_GROUPS) {
+    const isMatch = group.aliases.some(item => item.toLowerCase() === lower);
     if (isMatch) {
       // Đảm bảo tên danh mục gốc được xếp đầu tiên
-      const remaining = group.filter(item => item.toLowerCase() !== lower);
+      const remaining = group.aliases.filter(item => item.toLowerCase() !== lower);
       return [trimmed, ...remaining];
     }
   }
 
   return [trimmed];
+}
+
+/**
+ * Quy đổi một tên danh mục bất kỳ về tên danh mục chuẩn (Canonical Category).
+ * Giúp gom nhóm thống kê, biểu đồ không bị phân tách nhỏ lẻ.
+ */
+export function getCanonicalCategory(categoryName: string): string {
+  if (!categoryName) return 'Khác';
+  const trimmed = categoryName.trim();
+  const lower = trimmed.toLowerCase();
+
+  for (const group of CATEGORY_GROUPS) {
+    if (group.aliases.some(item => item.toLowerCase() === lower)) {
+      return group.canonical;
+    }
+  }
+
+  return trimmed;
 }
 
 function chuanHoaVanBan(text: string): string {
