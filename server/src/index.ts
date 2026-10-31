@@ -9,7 +9,11 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 dotenv.config();
 
 import express from 'express';
-import 'express-async-errors';
+try {
+  require('express-async-errors');
+} catch {
+  // Dự phòng an toàn nếu môi trường chưa cài package
+}
 import cors from 'cors';
 import fs from 'fs';
 import { initDB } from './lib/db';
