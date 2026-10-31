@@ -140,12 +140,12 @@ export default function BirthdaySurpriseModal() {
         {/* Khung ảnh bánh sinh nhật 18 tuổi nghệ thuật */}
         <div className="relative w-full h-56 sm:h-64 bg-gradient-to-b from-pink-100 via-rose-50 to-white dark:from-pink-950/40 dark:via-zinc-900 dark:to-zinc-900 overflow-hidden flex items-center justify-center">
           <img
-            src="/birthday-be-hien.png"
+            src="/birthday-be-hien.png?v=2"
             alt="Chúc mừng sinh nhật Bé Hiền 18 tuổi"
             className="w-full h-full object-cover object-center"
             onError={(e) => {
               // Fallback nếu ảnh chưa tải xong hoặc đường dẫn dự phòng
-              (e.currentTarget as HTMLImageElement).src = '/birthday-be-hien.jpg';
+              (e.currentTarget as HTMLImageElement).src = '/birthday-be-hien.jpg?v=2';
             }}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-white dark:from-zinc-900 via-transparent to-transparent opacity-80" />
