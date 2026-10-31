@@ -55,28 +55,50 @@ export default function CreditCardManager({ refreshKey, user, onCountChange }: P
   const [payingCard, setPayingCard] = useState<CreditCard | null>(null);
   const [payAmountStr, setPayAmountStr] = useState('');
   const [payDate, setPayDate] = useState(todayISO());
-  const [createExpense, setCreateExpense] = useState(true);
+  const [createExpense, setCreateExpense] = useState(false);
   const [payNote, setPayNote] = useState('');
   const [payError, setPayError] = useState('');
   const [isPaying, setIsPaying] = useState(false);
+  const [deletingCardId, setDeletingCardId] = useState<number | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   async function loadCreditCards() {
     setLoading(true);
+    setLoadError(null);
     try {
       const res = await api.getCreditCards();
       setData(res);
       if (onCountChange) {
         onCountChange(res.data.length);
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Lỗi khi tải danh sách thẻ tín dụng:', err);
+      setLoadError(err instanceof Error ? err.message : 'Không tải được danh sách thẻ tín dụng');
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    loadCreditCards();
+    let cancelled = false;
+    setLoading(true);
+    setLoadError(null);
+    api.getCreditCards()
+      .then(res => {
+        if (!cancelled) {
+          setData(res);
+          onCountChange?.(res.data.length);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Không tải được danh sách thẻ tín dụng');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [refreshKey]);
 
   // Đóng modal khi ấn Escape
@@ -126,7 +148,7 @@ export default function CreditCardManager({ refreshKey, user, onCountChange }: P
     setPayingCard(card);
     setPayAmountStr(String(card.remaining > 0 ? card.remaining : card.balance));
     setPayDate(todayISO());
-    setCreateExpense(true);
+    setCreateExpense(false);
     setPayNote('');
     setPayError('');
   }
@@ -200,6 +222,12 @@ export default function CreditCardManager({ refreshKey, user, onCountChange }: P
       return;
     }
 
+    const currentRemaining = payingCard.remaining > 0 ? payingCard.remaining : payingCard.balance;
+    if (parsedPay > currentRemaining) {
+      setPayError(`Số tiền thanh toán (${formatVND(parsedPay)}) không được vượt quá dư nợ còn lại (${formatVND(currentRemaining)})`);
+      return;
+    }
+
     setIsPaying(true);
     try {
       await api.payCreditCard(payingCard.id, {
@@ -220,17 +248,21 @@ export default function CreditCardManager({ refreshKey, user, onCountChange }: P
 
   // Xóa thẻ
   async function handleDeleteCard(card: CreditCard) {
+    if (deletingCardId) return;
     const ok = window.confirm(
       `${userName} có chắc chắn muốn xóa thẻ tín dụng "${card.card_name}" này không? Lịch sử thanh toán của thẻ cũng sẽ bị xóa.`
     );
     if (!ok) return;
 
+    setDeletingCardId(card.id);
     try {
       await api.deleteCreditCard(card.id);
       await loadCreditCards();
     } catch (err) {
       console.error(err);
       alert('Không thể xóa thẻ, vui lòng thử lại');
+    } finally {
+      setDeletingCardId(null);
     }
   }
 
@@ -370,6 +402,17 @@ export default function CreditCardManager({ refreshKey, user, onCountChange }: P
       {/* Danh sách thẻ nợ */}
       {loading ? (
         <p className="text-center text-xs text-slate-400 dark:text-zinc-500 py-8">Đang tải thẻ tín dụng...</p>
+      ) : loadError ? (
+        <div className="text-center py-6 px-4 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 rounded-2xl space-y-2">
+          <p className="text-xs text-rose-600 dark:text-rose-400 font-semibold">{loadError}</p>
+          <button
+            type="button"
+            onClick={loadCreditCards}
+            className="text-xs font-semibold px-3 py-1.5 bg-rose-600 text-white rounded-xl hover:bg-rose-700 transition-colors"
+          >
+            Thử lại
+          </button>
+        </div>
       ) : filteredCards.length === 0 ? (
         <div className="text-center py-10 border border-dashed border-slate-200 dark:border-zinc-700 rounded-2xl space-y-2.5">
           <CreditCardIcon className="w-9 h-9 text-slate-300 dark:text-zinc-600 mx-auto" />
@@ -545,7 +588,8 @@ export default function CreditCardManager({ refreshKey, user, onCountChange }: P
                   <button
                     type="button"
                     onClick={() => handleDeleteCard(card)}
-                    className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors"
+                    disabled={deletingCardId === card.id}
+                    className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors disabled:opacity-40"
                     title="Xóa thẻ này"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -564,7 +608,7 @@ export default function CreditCardManager({ refreshKey, user, onCountChange }: P
           onClick={() => setShowFormModal(false)}
         >
           <div
-            className="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl border border-slate-100 dark:border-zinc-800 w-full max-w-md p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150 cursor-default"
+            className="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl border border-slate-100 dark:border-zinc-800 w-full max-w-md max-h-[90dvh] overflow-y-auto p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150 cursor-default"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
@@ -709,7 +753,7 @@ export default function CreditCardManager({ refreshKey, user, onCountChange }: P
           onClick={() => setPayingCard(null)}
         >
           <div
-            className="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl border border-slate-100 dark:border-zinc-800 w-full max-w-sm p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150 cursor-default"
+            className="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl border border-slate-100 dark:border-zinc-800 w-full max-w-sm max-h-[90dvh] overflow-y-auto p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150 cursor-default"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-2.5">

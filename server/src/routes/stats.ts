@@ -85,7 +85,7 @@ router.get('/summary', requireAuth, async (req: AuthenticatedRequest, res: Respo
 
       const savingsRate = totalIncome > 0
         ? Math.round((balance / totalIncome) * 1000) / 10
-        : 0;
+        : (totalExpense > 0 ? -100 : 0);
 
       comparison = {
         prevIncome,
@@ -205,7 +205,7 @@ router.get('/by-date', requireAuth, async (req: AuthenticatedRequest, res: Respo
 });
 
 // ── POST /api/stats/query ──────────────────────────────────────────────────
-router.post('/query', async (req: Request, res: Response) => {
+router.post('/query', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   const { query } = req.body as { query: string };
   if (!query) return res.status(400).json({ error: 'query is required' });
 
@@ -265,7 +265,10 @@ interface QueryResult {
 }
 
 function parseVnAmountToken(raw: string): number | null {
+  if (!raw) return null;
   const str = raw.trim().toLowerCase().replace(/[,.](\d{3})/g, '$1').replace(/\s+/g, '');
+  if (str.includes('/') || str.includes(':')) return null;
+
   const trMatch = str.match(/^(\d+(?:[.,]\d+)?)(?:tr|triệu|m)$/);
   if (trMatch) return Math.round(parseFloat(trMatch[1].replace(',', '.')) * 1000000);
 
@@ -288,13 +291,85 @@ async function parseNaturalQuery(query: string): Promise<QueryResult> {
   const today = new Date();
   const result: QueryResult = { description: query };
 
-  // Parse khoảng số tiền hoặc so sánh số tiền:
+  const y = today.getFullYear();
+  const m = today.getMonth();
+
+  let textWithoutDates = text;
+
+  // Lỗi #14: Xử lý khoảng thời gian ngày tháng trước để tránh rangeMatch hiểu nhầm khoảng ngày là số tiền
+  const fromToRx = /từ\s+(\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{4})?)\s+đến\s+(\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{4})?|nay|hiện tại|giờ)/i;
+  const fromToMatch = text.match(fromToRx);
+  if (fromToMatch) {
+    result.dateFrom = resolveShortDate(fromToMatch[1], today);
+    const toStr = fromToMatch[2];
+    result.dateTo = /^(nay|hiện tại|giờ)/.test(toStr) ? formatDate(today) : resolveShortDate(toStr, today);
+    textWithoutDates = textWithoutDates.replace(fromToRx, ' ');
+  }
+
+  const fromYearRx = /từ\s+(?:đầu\s+năm|1\/1\/?)\s*(\d{4})\s+đến\s+(?:nay|hiện tại|giờ)/i;
+  const fromYearMatch = text.match(fromYearRx);
+  if (!result.dateFrom && fromYearMatch) {
+    result.dateFrom = `${fromYearMatch[1]}-01-01`;
+    result.dateTo = formatDate(today);
+    textWithoutDates = textWithoutDates.replace(fromYearRx, ' ');
+  }
+
+  if (!result.dateFrom) {
+    const monthRx = /tháng\s+(\d{1,2})(?:(?:\s*[\/\-]\s*|\s+năm\s+)(\d{4}))?/i;
+    const monthMatch = text.match(monthRx);
+    if (monthMatch) {
+      const mon = parseInt(monthMatch[1], 10) - 1;
+      const yr = monthMatch[2] ? parseInt(monthMatch[2], 10) : y;
+      result.dateFrom = formatDate(new Date(yr, mon, 1));
+      result.dateTo = formatDate(new Date(yr, mon + 1, 0));
+      textWithoutDates = textWithoutDates.replace(monthRx, ' ');
+    } else if (/(?<![\p{L}\p{N}])tháng này(?![\p{L}\p{N}])/iu.test(text)) {
+      result.dateFrom = formatDate(new Date(y, m, 1));
+      result.dateTo = formatDate(today);
+      textWithoutDates = textWithoutDates.replace(/(?<![\p{L}\p{N}])tháng này(?![\p{L}\p{N}])/iu, ' ');
+    } else if (/(?<![\p{L}\p{N}])tháng trước(?![\p{L}\p{N}])/iu.test(text)) {
+      result.dateFrom = formatDate(new Date(y, m - 1, 1));
+      result.dateTo = formatDate(new Date(y, m, 0));
+      textWithoutDates = textWithoutDates.replace(/(?<![\p{L}\p{N}])tháng trước(?![\p{L}\p{N}])/iu, ' ');
+    }
+  }
+
+  if (!result.dateFrom) {
+    const yearRx = /(?<![\p{L}\p{N}])năm\s+(\d{4})(?![\p{L}\p{N}])/iu;
+    const yearMatch = text.match(yearRx);
+    if (yearMatch) {
+      const yr = parseInt(yearMatch[1], 10);
+      result.dateFrom = `${yr}-01-01`;
+      result.dateTo = yr === y ? formatDate(today) : `${yr}-12-31`;
+      textWithoutDates = textWithoutDates.replace(yearRx, ' ');
+    } else if (/(?<![\p{L}\p{N}])năm nay(?![\p{L}\p{N}])/iu.test(text)) {
+      result.dateFrom = `${y}-01-01`;
+      result.dateTo = formatDate(today);
+      textWithoutDates = textWithoutDates.replace(/(?<![\p{L}\p{N}])năm nay(?![\p{L}\p{N}])/iu, ' ');
+    } else if (/(?<![\p{L}\p{N}])năm ngoái(?![\p{L}\p{N}])/iu.test(text)) {
+      result.dateFrom = `${y - 1}-01-01`;
+      result.dateTo = `${y - 1}-12-31`;
+      textWithoutDates = textWithoutDates.replace(/(?<![\p{L}\p{N}])năm ngoái(?![\p{L}\p{N}])/iu, ' ');
+    }
+  }
+
+  if (!result.dateFrom && /(?<![\p{L}\p{N}])tuần này(?![\p{L}\p{N}])/iu.test(text)) {
+    const dayOfWeek = today.getDay();
+    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() + mondayOffset);
+    result.dateFrom = formatDate(monday);
+    result.dateTo = formatDate(today);
+    textWithoutDates = textWithoutDates.replace(/(?<![\p{L}\p{N}])tuần này(?![\p{L}\p{N}])/iu, ' ');
+  }
+
+  // Parse khoảng số tiền hoặc so sánh số tiền trên chuỗi đã bóc tách ngày:
   // 1. Khoảng: 50k..200k, 50k-200k, từ 50k đến 200k
-  const rangeMatch = text.match(/(?:từ\s+)?(\d+[\w\.,]+)\s*(?:\.\.|\-|đến)\s*(\d+[\w\.,]+)/i);
+  const rangeMatch = textWithoutDates.match(/(?:từ\s+)?(\d+[\w\.,]+)\s*(?:\.\.|\-|đến)\s*(\d+[\w\.,]+)/i);
   if (rangeMatch) {
     const a1 = parseVnAmountToken(rangeMatch[1]);
     const a2 = parseVnAmountToken(rangeMatch[2]);
-    if (a1 !== null && a2 !== null) {
+    if (a1 !== null && a2 !== null && (a1 >= 1000 || a2 >= 1000 || /[ktrđcủ]/i.test(rangeMatch[0]))) {
       result.minAmount = Math.min(a1, a2);
       result.maxAmount = Math.max(a1, a2);
     }
@@ -302,7 +377,7 @@ async function parseNaturalQuery(query: string): Promise<QueryResult> {
 
   // 2. Lớn hơn: > 100k, >= 100k, trên 100k, hơn 100k
   if (result.minAmount === undefined) {
-    const gtMatch = text.match(/(?:>=|>|trên|hơn|lớn\s+hơn)\s*(\d+[\w\.,]+)/i);
+    const gtMatch = textWithoutDates.match(/(?:>=|>|trên|hơn|lớn\s+hơn)\s*(\d+[\w\.,]+)/i);
     if (gtMatch) {
       const a = parseVnAmountToken(gtMatch[1]);
       if (a !== null) result.minAmount = a;
@@ -311,16 +386,17 @@ async function parseNaturalQuery(query: string): Promise<QueryResult> {
 
   // 3. Nhỏ hơn: < 200k, <= 200k, dưới 200k, bé hơn 200k
   if (result.maxAmount === undefined) {
-    const ltMatch = text.match(/(?:<=|<|dưới|bé\s+hơn|nhỏ\s+hơn)\s*(\d+[\w\.,]+)/i);
+    const ltMatch = textWithoutDates.match(/(?:<=|<|dưới|bé\s+hơn|nhỏ\s+hơn)\s*(\d+[\w\.,]+)/i);
     if (ltMatch) {
       const a = parseVnAmountToken(ltMatch[1]);
       if (a !== null) result.maxAmount = a;
     }
   }
 
-  if (/\b(chi tiêu|chi phí|tiêu xài|chi|expense)\b/.test(text)) {
+  // Lỗi #15: Dùng Unicode boundary để không nhận nhầm "tiền thuê", "thuốc" thành thu hay "chiều" thành chi
+  if (/(?<![\p{L}\p{N}])(chi tiêu|chi phí|tiêu xài|chi|expense)(?![\p{L}\p{N}])/iu.test(text)) {
     result.type = 'expense';
-  } else if (/\b(thu nhập|thu|tiền vào|income)\b/.test(text)) {
+  } else if (/(?<![\p{L}\p{N}])(thu nhập|thu|tiền vào|income)(?![\p{L}\p{N}])/iu.test(text)) {
     result.type = 'income';
   }
 
@@ -389,66 +465,6 @@ async function parseNaturalQuery(query: string): Promise<QueryResult> {
         break;
       }
     }
-  }
-
-  const y = today.getFullYear();
-  const m = today.getMonth();
-
-  const fromToRx = /từ\s+(\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{4})?)\s+đến\s+(\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{4})?|nay|hiện tại|giờ)/i;
-  const fromToMatch = text.match(fromToRx);
-  if (fromToMatch) {
-    result.dateFrom = resolveShortDate(fromToMatch[1], today);
-    const toStr = fromToMatch[2];
-    result.dateTo = /^(nay|hiện tại|giờ)/.test(toStr) ? formatDate(today) : resolveShortDate(toStr, today);
-  }
-
-  const fromYearRx = /từ\s+(?:đầu\s+năm|1\/1\/?)\s*(\d{4})\s+đến\s+(?:nay|hiện tại|giờ)/i;
-  const fromYearMatch = text.match(fromYearRx);
-  if (!result.dateFrom && fromYearMatch) {
-    result.dateFrom = `${fromYearMatch[1]}-01-01`;
-    result.dateTo = formatDate(today);
-  }
-
-  if (!result.dateFrom) {
-    const monthRx = /tháng\s+(\d{1,2})(?:(?:\s*[\/\-]\s*|\s+năm\s+)(\d{4}))?/i;
-    const monthMatch = text.match(monthRx);
-    if (monthMatch) {
-      const mon = parseInt(monthMatch[1], 10) - 1;
-      const yr = monthMatch[2] ? parseInt(monthMatch[2], 10) : y;
-      result.dateFrom = formatDate(new Date(yr, mon, 1));
-      result.dateTo = formatDate(new Date(yr, mon + 1, 0));
-    } else if (/\btháng này\b/.test(text)) {
-      result.dateFrom = formatDate(new Date(y, m, 1));
-      result.dateTo = formatDate(today);
-    } else if (/\btháng trước\b/.test(text)) {
-      result.dateFrom = formatDate(new Date(y, m - 1, 1));
-      result.dateTo = formatDate(new Date(y, m, 0));
-    }
-  }
-
-  if (!result.dateFrom) {
-    const yearRx = /\bnăm\s+(\d{4})\b/i;
-    const yearMatch = text.match(yearRx);
-    if (yearMatch) {
-      const yr = parseInt(yearMatch[1], 10);
-      result.dateFrom = `${yr}-01-01`;
-      result.dateTo = yr === y ? formatDate(today) : `${yr}-12-31`;
-    } else if (/\bnăm nay\b/.test(text)) {
-      result.dateFrom = `${y}-01-01`;
-      result.dateTo = formatDate(today);
-    } else if (/\bnăm ngoái\b/.test(text)) {
-      result.dateFrom = `${y - 1}-01-01`;
-      result.dateTo = `${y - 1}-12-31`;
-    }
-  }
-
-  if (!result.dateFrom && /\btuần này\b/.test(text)) {
-    const dayOfWeek = today.getDay();
-    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-    const monday = new Date(today);
-    monday.setDate(today.getDate() + mondayOffset);
-    result.dateFrom = formatDate(monday);
-    result.dateTo = formatDate(today);
   }
 
   return result;

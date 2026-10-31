@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import crypto from 'crypto';
 import { db } from '../lib/db';
 import { hashPassword, verifyPassword, generateToken, requireAuth, AuthenticatedRequest } from '../lib/auth';
 import { sendPasswordResetOtp } from '../lib/mailer';
@@ -40,8 +41,8 @@ router.post('/register', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Tên đăng nhập chỉ gồm chữ cái, số, gạch dưới (_) hoặc gạch nối (-)' });
   }
 
-  if (!cleanPassword || cleanPassword.length < 4) {
-    return res.status(400).json({ error: 'Mật khẩu phải có ít nhất 4 ký tự' });
+  if (!cleanPassword || cleanPassword.length < 8) {
+    return res.status(400).json({ error: 'Mật khẩu phải có ít nhất 8 ký tự' });
   }
 
   if (cleanEmail && !isValidEmail(cleanEmail)) {
@@ -207,31 +208,33 @@ router.post('/forgot-password', async (req: Request, res: Response) => {
     });
   }
 
-  // Tạo mã OTP ngẫu nhiên 6 chữ số
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  // Tạo mã OTP ngẫu nhiên 6 chữ số bằng crypto an toàn
+  const otp = crypto.randomInt(100000, 1000000).toString();
   const expiresAt = Date.now() + 15 * 60 * 1000; // 15 phút hiệu lực
 
   // Lưu OTP vào bảng password_resets
   await db.prepare(`
-    INSERT INTO password_resets (user_id, email, otp, expires_at, used)
-    VALUES (?, ?, ?, ?, 0)
+    INSERT INTO password_resets (user_id, email, otp, expires_at, used, attempts)
+    VALUES (?, ?, ?, ?, 0, 0)
   `).run(user.id, user.email, otp, expiresAt);
 
   // Gửi email qua mailer
   const mailResult = await sendPasswordResetOtp(user.email, otp, user.name || user.username);
   if (!mailResult.success) {
     return res.status(500).json({
-      error: 'Không thể gửi email lúc này. Vui lòng thử lại sau giây lát hoặc liên hệ hỗ trợ.'
+      error: mailResult.error || 'Không thể gửi email lúc này. Vui lòng thử lại sau giây lát hoặc liên hệ hỗ trợ.'
     });
   }
+
+  const isDev = process.env.NODE_ENV !== 'production';
 
   return res.json({
     success: true,
     message: `Mã OTP đã được gửi về Gmail ${maskEmail(user.email)}. Vui lòng kiểm tra hộp thư đến (hoặc hòm thư Spam).`,
     maskedEmail: maskEmail(user.email),
     identifier: user.username,
-    simulated: mailResult.simulated,
-    simulatedOtp: mailResult.simulatedOtp
+    simulated: isDev ? mailResult.simulated : undefined,
+    simulatedOtp: isDev ? mailResult.simulatedOtp : undefined
   });
 });
 
@@ -251,8 +254,8 @@ router.post('/reset-password', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Vui lòng điền đầy đủ thông tin: tài khoản, mã OTP và mật khẩu mới' });
   }
 
-  if (cleanPassword.length < 4) {
-    return res.status(400).json({ error: 'Mật khẩu mới phải có ít nhất 4 ký tự' });
+  if (cleanPassword.length < 8) {
+    return res.status(400).json({ error: 'Mật khẩu mới phải có ít nhất 8 ký tự' });
   }
 
   const user = await db.prepare(`
@@ -267,14 +270,18 @@ router.post('/reset-password', async (req: Request, res: Response) => {
 
   const now = Date.now();
   const resetRecord = await db.prepare(`
-    SELECT id, expires_at, used
+    SELECT id, otp, expires_at, used, attempts
     FROM password_resets
-    WHERE user_id = ? AND otp = ?
+    WHERE user_id = ?
     ORDER BY id DESC LIMIT 1
-  `).get<{ id: number; expires_at: number | string; used: number | boolean }>(user.id, cleanOtp);
+  `).get<{ id: number; otp: string; expires_at: number | string; used: number | boolean; attempts: number }>(user.id);
 
   if (!resetRecord) {
-    return res.status(400).json({ error: 'Mã xác thực OTP không chính xác. Vui lòng kiểm tra lại.' });
+    return res.status(400).json({ error: 'Không tìm thấy yêu cầu đặt lại mật khẩu hợp lệ. Vui lòng gửi lại yêu cầu mới.' });
+  }
+
+  if (Number(resetRecord.attempts || 0) >= 5) {
+    return res.status(400).json({ error: 'Mã xác thực đã bị khóa do nhập sai quá 5 lần. Vui lòng gửi lại yêu cầu mã OTP mới.' });
   }
 
   if (resetRecord.used === 1 || resetRecord.used === true) {
@@ -285,6 +292,15 @@ router.post('/reset-password', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Mã xác thực đã hết hạn (hiệu lực 15 phút). Vui lòng yêu cầu mã mới.' });
   }
 
+  if (resetRecord.otp !== cleanOtp) {
+    const newAttempts = (Number(resetRecord.attempts) || 0) + 1;
+    await db.prepare('UPDATE password_resets SET attempts = ? WHERE id = ?').run(newAttempts, resetRecord.id);
+    const remaining = Math.max(0, 5 - newAttempts);
+    return res.status(400).json({
+      error: `Mã xác thực OTP không chính xác. Bạn còn ${remaining} lần thử.`
+    });
+  }
+
   // Đánh dấu mã OTP đã được sử dụng
   await db.prepare('UPDATE password_resets SET used = 1 WHERE id = ?').run(resetRecord.id);
 
@@ -292,7 +308,10 @@ router.post('/reset-password', async (req: Request, res: Response) => {
   const { hash, salt } = hashPassword(cleanPassword);
   await db.prepare('UPDATE users SET password = ?, salt = ? WHERE id = ?').run(hash, salt, user.id);
 
-  // Tạo phiên đăng nhập mới ngay lập tức
+  // Thu hồi các phiên đăng nhập cũ để bảo mật (Lỗi #30)
+  await db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
+
+  // Tạo phiên đăng nhập mới duy nhất
   const token = generateToken();
   await db.prepare('INSERT INTO sessions (token, user_id) VALUES (?, ?)').run(token, user.id);
 
@@ -322,8 +341,8 @@ router.put('/change-password', requireAuth, async (req: AuthenticatedRequest, re
     return res.status(400).json({ error: 'Vui lòng nhập cả mật khẩu cũ và mật khẩu mới' });
   }
 
-  if (newPassword.trim().length < 4) {
-    return res.status(400).json({ error: 'Mật khẩu mới phải có ít nhất 4 ký tự' });
+  if (newPassword.trim().length < 8) {
+    return res.status(400).json({ error: 'Mật khẩu mới phải có ít nhất 8 ký tự' });
   }
 
   const user = await db.prepare('SELECT password, salt FROM users WHERE id = ?').get<any>(userId);
@@ -333,6 +352,13 @@ router.put('/change-password', requireAuth, async (req: AuthenticatedRequest, re
 
   const { hash, salt } = hashPassword(newPassword.trim());
   await db.prepare('UPDATE users SET password = ?, salt = ? WHERE id = ?').run(hash, salt, userId);
+
+  // Thu hồi các phiên khác ngoại trừ phiên hiện tại (Lỗi #30)
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const currentToken = authHeader.substring(7).trim();
+    await db.prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?').run(userId, currentToken);
+  }
 
   return res.json({ success: true, message: 'Đổi mật khẩu thành công!' });
 });

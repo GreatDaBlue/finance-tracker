@@ -9,6 +9,7 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 dotenv.config();
 
 import express from 'express';
+import 'express-async-errors';
 import cors from 'cors';
 import fs from 'fs';
 import { initDB } from './lib/db';
@@ -50,6 +51,23 @@ if (fs.existsSync(clientDist)) {
     res.sendFile(path.join(clientDist, 'index.html'));
   });
 }
+
+// ── Error handling middleware bắt mọi lỗi async và DB ───────────────────────
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('❌ [Unhandled Server Error]:', err);
+  const status = typeof err?.status === 'number' ? err.status : 500;
+  res.status(status).json({
+    error: err?.message || 'Lỗi máy chủ nội bộ. Vui lòng thử lại sau.'
+  });
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('⚠️ [Unhandled Rejection]:', reason, 'at:', promise);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('⚠️ [Uncaught Exception]:', err);
+});
 
 // ── Khởi động server (bất đồng bộ vì initDB cần await) ────────────────────
 async function khoiDong() {

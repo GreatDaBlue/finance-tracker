@@ -1,3 +1,5 @@
+import { getStoredUser } from './api';
+
 export interface CustomCategory {
   id: string;
   name: string;
@@ -23,11 +25,19 @@ export const DEFAULT_CATEGORIES: CustomCategory[] = [
   { id: 'cat_other', name: 'Khác', icon: '❓', color: '#64748b', type: 'both', isDefault: true }
 ];
 
-const STORAGE_KEY = 'tiendauroi_custom_categories';
+function getStorageKey(): string {
+  try {
+    const user = getStoredUser();
+    return user?.id ? `tiendauroi_custom_categories_${user.id}` : 'tiendauroi_custom_categories';
+  } catch {
+    return 'tiendauroi_custom_categories';
+  }
+}
 
 export function getCustomCategories(): CustomCategory[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const key = getStorageKey();
+    const raw = localStorage.getItem(key);
     if (!raw) return [];
     return JSON.parse(raw);
   } catch {
@@ -36,7 +46,8 @@ export function getCustomCategories(): CustomCategory[] {
 }
 
 export function saveCustomCategories(cats: CustomCategory[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(cats));
+  const key = getStorageKey();
+  localStorage.setItem(key, JSON.stringify(cats));
 }
 
 export function getAllCategories(): CustomCategory[] {

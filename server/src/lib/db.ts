@@ -332,11 +332,18 @@ async function initPostgresTables(): Promise<void> {
       otp VARCHAR(10) NOT NULL,
       expires_at BIGINT NOT NULL,
       used INTEGER DEFAULT 0,
+      attempts INTEGER DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets(user_id);
     CREATE INDEX IF NOT EXISTS idx_password_resets_otp ON password_resets(otp);
   `);
+
+  try {
+    await db.exec('ALTER TABLE password_resets ADD COLUMN attempts INTEGER DEFAULT 0;');
+  } catch {
+    // Đã tồn tại
+  }
 }
 
 // ── Bảng cho SQLite ───────────────────────────────────────────────────────
@@ -485,12 +492,19 @@ async function initSqliteTables(): Promise<void> {
       otp TEXT NOT NULL,
       expires_at INTEGER NOT NULL,
       used INTEGER DEFAULT 0,
+      attempts INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now','localtime')),
       FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
     );
     CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets(user_id);
     CREATE INDEX IF NOT EXISTS idx_password_resets_otp ON password_resets(otp);
   `);
+
+  try {
+    await db.exec('ALTER TABLE password_resets ADD COLUMN attempts INTEGER DEFAULT 0;');
+  } catch {
+    // Đã tồn tại
+  }
 }
 
 // ── Seed 10 danh mục mặc định ─────────────────────────────────────────────

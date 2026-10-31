@@ -1,5 +1,17 @@
 import * as XLSX from 'xlsx';
-import type { Transaction } from './api';
+import { type Transaction, todayISO } from './api';
+
+/**
+ * Phòng chống CSV / Excel formula injection (Lỗi #31)
+ */
+function safeCell(val: any): string {
+  if (val === null || val === undefined) return '';
+  const s = String(val);
+  if (/^[=+\-@\t\r]/.test(s)) {
+    return `'${s}`;
+  }
+  return s;
+}
 
 /**
  * Xuất danh sách giao dịch ra file Excel (.xlsx)
@@ -15,9 +27,9 @@ export function exportToExcel(transactions: Transaction[], filename = 'Giao_Dich
     'Ngày giao dịch': t.date.split('-').reverse().join('/'),
     'Loại giao dịch': t.type === 'income' ? 'Thu nhập' : 'Chi tiêu',
     'Số tiền (₫)': t.amount,
-    'Danh mục': t.category || 'Khác',
-    'Mô tả': t.description,
-    'Ghi chú': t.note || ''
+    'Danh mục': safeCell(t.category || 'Khác'),
+    'Mô tả': safeCell(t.description),
+    'Ghi chú': safeCell(t.note || '')
   }));
 
   const worksheet = XLSX.utils.json_to_sheet(rows);
@@ -36,7 +48,7 @@ export function exportToExcel(transactions: Transaction[], filename = 'Giao_Dich
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'GiaoDich');
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = todayISO();
   XLSX.writeFile(workbook, `${filename}_${todayStr}.xlsx`);
 }
 
@@ -58,9 +70,9 @@ export function exportToCSV(transactions: Transaction[], filename = 'Giao_Dich_T
       `"${t.date.split('-').reverse().join('/')}"`,
       `"${t.type === 'income' ? 'Thu nhập' : 'Chi tiêu'}"`,
       t.amount,
-      `"${(t.category || 'Khác').replace(/"/g, '""')}"`,
-      `"${(t.description || '').replace(/"/g, '""')}"`,
-      `"${(t.note || '').replace(/"/g, '""')}"`
+      `"${safeCell(t.category || 'Khác').replace(/"/g, '""')}"`,
+      `"${safeCell(t.description || '').replace(/"/g, '""')}"`,
+      `"${safeCell(t.note || '').replace(/"/g, '""')}"`
     ];
     csvRows.push(row.join(','));
   });
@@ -70,7 +82,7 @@ export function exportToCSV(transactions: Transaction[], filename = 'Giao_Dich_T
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = todayISO();
 
   link.setAttribute('href', url);
   link.setAttribute('download', `${filename}_${todayStr}.csv`);

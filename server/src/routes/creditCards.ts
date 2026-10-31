@@ -19,14 +19,25 @@ export interface CreditCardRow {
   created_at: string;
 }
 
+const MAX_AMOUNT = 1_000_000_000_000;
+
+function getVietnamDate(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date());
+}
+
 function getDaysRemaining(dueDateStr: string): number {
   if (!dueDateStr) return 999;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const due = new Date(dueDateStr);
-  due.setHours(0, 0, 0, 0);
-  const diffTime = due.getTime() - today.getTime();
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  const todayStr = getVietnamDate();
+  const [ty, tm, td] = todayStr.split('-').map(Number);
+  const [dy, dm, dd] = dueDateStr.split('-').map(Number);
+  const todayMs = Date.UTC(ty, tm - 1, td);
+  const dueMs = Date.UTC(dy, dm - 1, dd);
+  return Math.round((dueMs - todayMs) / (1000 * 60 * 60 * 24));
 }
 
 // ── GET /api/credit-cards ──────────────────────────────────────────────────
@@ -102,8 +113,8 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res: Response) =
   if (!card_name || !card_name.trim()) {
     return res.status(400).json({ error: 'Vui lòng nhập tên thẻ tín dụng' });
   }
-  if (typeof balance !== 'number' || balance <= 0) {
-    return res.status(400).json({ error: 'Dư nợ cần thanh toán phải lớn hơn 0' });
+  if (typeof balance !== 'number' || balance <= 0 || balance > MAX_AMOUNT) {
+    return res.status(400).json({ error: `Dư nợ cần thanh toán phải từ 1 đến ${MAX_AMOUNT.toLocaleString('vi-VN')} ₫` });
   }
   if (!due_date || !due_date.trim()) {
     return res.status(400).json({ error: 'Vui lòng chọn ngày đến hạn thanh toán' });
@@ -175,8 +186,8 @@ router.post('/:id/pay', requireAuth, async (req: AuthenticatedRequest, res: Resp
     create_expense?: boolean;
   };
 
-  if (typeof amount !== 'number' || amount <= 0) {
-    return res.status(400).json({ error: 'Số tiền thanh toán phải lớn hơn 0' });
+  if (typeof amount !== 'number' || amount <= 0 || amount > MAX_AMOUNT) {
+    return res.status(400).json({ error: `Số tiền thanh toán phải từ 1 đến ${MAX_AMOUNT.toLocaleString('vi-VN')} ₫` });
   }
 
   const existing = await db.prepare('SELECT * FROM credit_cards WHERE id = ? AND user_id = ?').get<CreditCardRow>(id, userId);
@@ -184,7 +195,14 @@ router.post('/:id/pay', requireAuth, async (req: AuthenticatedRequest, res: Resp
     return res.status(404).json({ error: 'Không tìm thấy thẻ tín dụng' });
   }
 
-  const payDate = payment_date || new Date().toISOString().split('T')[0];
+  const currentRemaining = Math.max(0, Number(existing.balance) - Number(existing.paid_amount || 0));
+  if (amount > currentRemaining) {
+    return res.status(400).json({
+      error: `Số tiền thanh toán (${amount.toLocaleString('vi-VN')} ₫) vượt quá dư nợ còn lại (${currentRemaining.toLocaleString('vi-VN')} ₫)`
+    });
+  }
+
+  const payDate = payment_date || getVietnamDate();
   const newPaid = Number(existing.paid_amount || 0) + amount;
   const newStatus = newPaid >= Number(existing.balance) ? 'settled' : 'pending';
 
@@ -199,8 +217,8 @@ router.post('/:id/pay', requireAuth, async (req: AuthenticatedRequest, res: Resp
      VALUES (?, ?, ?, ?, ?)`
   ).run(id, userId, amount, payDate, (note || '').trim());
 
-  // Nếu người dùng chọn tạo giao dịch chi tiêu tương ứng
-  if (create_expense) {
+  // Nếu người dùng chọn tạo giao dịch chi tiêu tương ứng (mặc định false)
+  if (create_expense === true) {
     await db.prepare(
       `INSERT INTO transactions (user_id, date, type, amount, description, category, note)
        VALUES (?, ?, 'expense', ?, ?, 'Thanh toán thẻ tín dụng', ?)`

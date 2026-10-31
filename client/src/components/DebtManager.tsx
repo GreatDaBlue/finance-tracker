@@ -31,22 +31,49 @@ export default function DebtManager({ refreshKey, user }: Props) {
   // Modal trả bớt tiền nợ
   const [repayDebt, setRepayDebt] = useState<Debt | null>(null);
   const [repayAmountStr, setRepayAmountStr] = useState('');
+  const [repayError, setRepayError] = useState('');
+  const [isRepaying, setIsRepaying] = useState(false);
+  const [actionDebtId, setActionDebtId] = useState<number | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   async function loadDebts() {
     setLoading(true);
+    setLoadError(null);
     try {
       const res = await api.getDebts();
       setData(res);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(err);
+      setLoadError(err instanceof Error ? err.message : 'Không tải được danh sách nợ');
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    loadDebts();
-    api.getCreditCards().then(res => setCreditCount(res.data.length)).catch(() => {});
+    let cancelled = false;
+    setLoading(true);
+    setLoadError(null);
+    api.getDebts()
+      .then(res => {
+        if (!cancelled) setData(res);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Không tải được danh sách nợ');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    api.getCreditCards()
+      .then(res => {
+        if (!cancelled) setCreditCount(res.data.length);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
   }, [refreshKey]);
 
   useEffect(() => {
@@ -101,45 +128,69 @@ export default function DebtManager({ refreshKey, user }: Props) {
   }
 
   async function handleMarkSettled(debt: Debt) {
+    if (actionDebtId !== null) return;
+    const ok = window.confirm(`${userName} có chắc chắn muốn đánh dấu khoản nợ của "${debt.person}" đã tất toán hoàn toàn?`);
+    if (!ok) return;
+
+    setActionDebtId(debt.id);
     try {
       await api.updateDebt(debt.id, {
         paid_amount: debt.amount,
         status: 'settled'
       });
       await loadDebts();
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(err);
+      alert(err instanceof Error ? err.message : 'Không thể cập nhật trạng thái khoản nợ');
+    } finally {
+      setActionDebtId(null);
     }
   }
 
   async function handleRepaySubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!repayDebt) return;
+    if (!repayDebt || isRepaying) return;
+    setRepayError('');
 
     const repayAmount = parseAmountInput(repayAmountStr);
-    if (!repayAmount || repayAmount <= 0) return;
+    if (!repayAmount || repayAmount <= 0) {
+      setRepayError('Vui lòng nhập số tiền hợp lệ (ví dụ: 500k, 1 củ)');
+      return;
+    }
 
-    const newPaid = Number(repayDebt.paid_amount) + repayAmount;
+    const currentRemaining = repayDebt.remaining > 0 ? repayDebt.remaining : (repayDebt.amount - (repayDebt.paid_amount || 0));
+    if (repayAmount > currentRemaining) {
+      setRepayError(`Số tiền (${formatVND(repayAmount)}) không được vượt quá số dư còn lại (${formatVND(currentRemaining)})`);
+      return;
+    }
+
+    setIsRepaying(true);
     try {
-      await api.updateDebt(repayDebt.id, {
-        paid_amount: newPaid,
-        status: newPaid >= repayDebt.amount ? 'settled' : 'pending'
-      });
+      await api.repayDebt(repayDebt.id, repayAmount);
       setRepayDebt(null);
       setRepayAmountStr('');
       await loadDebts();
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(err);
+      setRepayError(err instanceof Error ? err.message : 'Có lỗi khi thanh toán khoản nợ');
+    } finally {
+      setIsRepaying(false);
     }
   }
 
   async function handleDeleteDebt(id: number) {
+    if (actionDebtId !== null) return;
     if (!confirm(`${userName} có chắc chắn muốn xóa khoản nợ này?`)) return;
+
+    setActionDebtId(id);
     try {
       await api.deleteDebt(id);
       await loadDebts();
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(err);
+      alert(err instanceof Error ? err.message : 'Không thể xóa khoản nợ');
+    } finally {
+      setActionDebtId(null);
     }
   }
 
@@ -312,6 +363,17 @@ export default function DebtManager({ refreshKey, user }: Props) {
       {/* Danh sách các khoản nợ */}
       {loading ? (
         <p className="text-center text-xs text-slate-400 dark:text-zinc-500 py-8">Đang tải sổ nợ...</p>
+      ) : loadError ? (
+        <div className="text-center py-6 px-4 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 rounded-2xl space-y-2">
+          <p className="text-xs text-rose-600 dark:text-rose-400 font-semibold">{loadError}</p>
+          <button
+            type="button"
+            onClick={loadDebts}
+            className="text-xs font-semibold px-3 py-1.5 bg-rose-600 text-white rounded-xl hover:bg-rose-700 transition-colors"
+          >
+            Thử lại
+          </button>
+        </div>
       ) : filteredDebts.length === 0 ? (
         <div className="text-center py-8 border border-dashed border-slate-200 dark:border-zinc-700 rounded-2xl space-y-2">
           <Receipt className="w-8 h-8 text-slate-300 dark:text-zinc-600 mx-auto" />
@@ -471,21 +533,24 @@ export default function DebtManager({ refreshKey, user }: Props) {
                       <>
                         <button
                           type="button"
+                          disabled={actionDebtId !== null}
                           onClick={() => {
                             setRepayDebt(d);
                             setRepayAmountStr('');
+                            setRepayError('');
                           }}
-                          className="flex-1 sm:flex-none px-3 py-1.5 bg-white dark:bg-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-700 border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-200 text-xs font-semibold rounded-xl transition-colors shadow-2xs text-center"
+                          className="flex-1 sm:flex-none px-3 py-1.5 bg-white dark:bg-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-700 border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-200 text-xs font-semibold rounded-xl transition-colors shadow-2xs text-center disabled:opacity-50"
                         >
                           💸 {isLend ? 'Thu bớt' : 'Trả bớt'}
                         </button>
                         <button
                           type="button"
+                          disabled={actionDebtId !== null}
                           onClick={() => handleMarkSettled(d)}
-                          className="flex-1 sm:flex-none px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl transition-colors shadow-2xs flex items-center justify-center gap-1"
+                          className="flex-1 sm:flex-none px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl transition-colors shadow-2xs flex items-center justify-center gap-1 disabled:opacity-50"
                         >
                           <Check className="w-3.5 h-3.5" />
-                          <span>Đã xong</span>
+                          <span>{actionDebtId === d.id ? 'Đang lưu...' : 'Đã xong'}</span>
                         </button>
                       </>
                     )}
@@ -493,8 +558,9 @@ export default function DebtManager({ refreshKey, user }: Props) {
 
                   <button
                     type="button"
+                    disabled={actionDebtId !== null}
                     onClick={() => handleDeleteDebt(d.id)}
-                    className="p-2 sm:p-1.5 text-slate-400 dark:text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/50 active:scale-90 transition-all cursor-pointer ml-auto"
+                    className="p-2 sm:p-1.5 text-slate-400 dark:text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/50 active:scale-90 transition-all cursor-pointer ml-auto disabled:opacity-50"
                     title="Xóa khoản nợ này"
                     aria-label="Xóa khoản nợ này"
                   >
@@ -516,7 +582,7 @@ export default function DebtManager({ refreshKey, user }: Props) {
           onClick={() => setShowAddModal(false)}
         >
           <div
-            className="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl border border-slate-100 dark:border-zinc-800 w-full max-w-md p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150 cursor-default"
+            className="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl border border-slate-100 dark:border-zinc-800 w-full max-w-md max-h-[90dvh] overflow-y-auto p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150 cursor-default"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
@@ -662,7 +728,7 @@ export default function DebtManager({ refreshKey, user }: Props) {
           onClick={() => setRepayDebt(null)}
         >
           <div
-            className="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl border border-slate-100 dark:border-zinc-800 w-full max-w-sm p-5 space-y-3.5 animate-in fade-in zoom-in-95 duration-150 cursor-default"
+            className="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl border border-slate-100 dark:border-zinc-800 w-full max-w-sm max-h-[90dvh] overflow-y-auto p-5 space-y-3.5 animate-in fade-in zoom-in-95 duration-150 cursor-default"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-2">
@@ -679,7 +745,7 @@ export default function DebtManager({ refreshKey, user }: Props) {
             </div>
 
             <p className="text-xs text-slate-600 dark:text-zinc-300">
-              {repayDebt.type === 'lend' ? 'Thu nợ từ' : 'Trả nợ cho'}: <strong className="text-slate-800 dark:text-zinc-100">{repayDebt.person}</strong> (Còn lại: <strong className="text-purple-600 dark:text-purple-400">{formatVND(repayDebt.remaining > 0 ? repayDebt.remaining : repayDebt.amount)}</strong>)
+              {repayDebt.type === 'lend' ? 'Thu nợ từ' : 'Trả nợ cho'}: <strong className="text-slate-800 dark:text-zinc-100">{repayDebt.person}</strong> (Còn lại: <strong className="text-purple-600 dark:text-purple-400">{formatVND(repayDebt.remaining > 0 ? repayDebt.remaining : (repayDebt.amount - (repayDebt.paid_amount || 0)))}</strong>)
             </p>
 
             <form onSubmit={handleRepaySubmit} className="space-y-3">
@@ -697,6 +763,12 @@ export default function DebtManager({ refreshKey, user }: Props) {
                 />
               </div>
 
+              {repayError && (
+                <p className="text-xs text-rose-500 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900/60 p-2 rounded-lg">
+                  {repayError}
+                </p>
+              )}
+
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button
                   type="button"
@@ -707,9 +779,12 @@ export default function DebtManager({ refreshKey, user }: Props) {
                 </button>
                 <button
                   type="submit"
-                  className="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white shadow-xs"
+                  disabled={isRepaying}
+                  className="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white shadow-xs disabled:opacity-50"
                 >
-                  {repayDebt.type === 'lend' ? 'Xác nhận thu nợ' : 'Xác nhận trả nợ'}
+                  {isRepaying
+                    ? 'Đang lưu...'
+                    : (repayDebt.type === 'lend' ? 'Xác nhận thu nợ' : 'Xác nhận trả nợ')}
                 </button>
               </div>
             </form>

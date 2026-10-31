@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   api,
   thisMonthRange,
@@ -58,18 +58,53 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [offset, setOffset] = useState(0);
   const [filters, setFilters] = useState<FilterParams>(thisMonthRange());
-  const [activeTab, setActiveTab] = useState<'list' | 'dashboard' | 'budget' | 'debt'>('list');
+  const [activeTab, setActiveTab] = useState<'list' | 'dashboard' | 'budget' | 'debt'>(() => {
+    try {
+      const saved = localStorage.getItem('tiendauroi_active_tab');
+      if (saved && ['list', 'dashboard', 'budget', 'debt'].includes(saved)) {
+        return saved as 'list' | 'dashboard' | 'budget' | 'debt';
+      }
+    } catch {}
+    return 'list';
+  });
   const [showImport, setShowImport] = useState(false);
   const [showRecurring, setShowRecurring] = useState(false);
   const [showInstallGuide, setShowInstallGuide] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const loadRequestIdRef = useRef(0);
 
   // Theo dõi các tab đã từng mở ít nhất 1 lần để lazy-load và giữ component trong RAM (Keep-Alive)
-  const [visitedTabs, setVisitedTabs] = useState<Record<string, boolean>>({ list: true });
+  const [visitedTabs, setVisitedTabs] = useState<Record<string, boolean>>(() => {
+    try {
+      const saved = localStorage.getItem('tiendauroi_active_tab');
+      if (saved && ['list', 'dashboard', 'budget', 'debt'].includes(saved)) {
+        return { [saved]: true, list: true };
+      }
+    } catch {}
+    return { list: true };
+  });
+
+  const resetSession = useCallback(() => {
+    setVisitedTabs({ list: true });
+    setTransactions([]);
+    setTotal(0);
+    setOffset(0);
+    setFilters(thisMonthRange());
+    setRefreshKey(0);
+    setLoadError(null);
+    try {
+      localStorage.removeItem('tiendauroi_active_tab');
+    } catch {}
+    setActiveTab('list');
+  }, []);
 
   useEffect(() => {
+    try {
+      localStorage.setItem('tiendauroi_active_tab', activeTab);
+    } catch {}
     setVisitedTabs(prev => (prev[activeTab] ? prev : { ...prev, [activeTab]: true }));
     // Khi chuyển sang tab dashboard, kích hoạt nhẹ event resize để Recharts tính toán lại kích thước biểu đồ chuẩn xác
     if (activeTab === 'dashboard') {
@@ -122,32 +157,45 @@ export default function HomePage() {
         setCurrentUser(res.user);
         setStoredUser(res.user);
       })
-      .catch(() => {
-        setCurrentUser(null);
-        setStoredUser(null);
+      .catch((err: any) => {
+        // Lỗi #7: Chỉ đá người dùng ra khi nhận mã 401 rõ ràng từ server.
+        // Các lỗi mạng, server ngủ (502, 504), timeout giữ nguyên người dùng đã lưu trong máy.
+        if (err?.status === 401) {
+          resetSession();
+          setCurrentUser(null);
+          setStoredUser(null);
+        }
       })
       .finally(() => setAuthChecking(false));
 
     const onAuthLogout = () => {
+      resetSession();
       setCurrentUser(null);
       setStoredUser(null);
     };
     window.addEventListener('auth_logout', onAuthLogout);
     return () => window.removeEventListener('auth_logout', onAuthLogout);
-  }, []);
+  }, [resetSession]);
 
   const fetchTransactions = useCallback(
     async (f: FilterParams, off: number, replace: boolean) => {
       if (!currentUser) return;
+      const reqId = ++loadRequestIdRef.current;
       setLoading(true);
+      setLoadError(null);
       try {
         const res = await api.getTransactions({ ...f, limit: PAGE_SIZE, offset: off });
+        if (reqId !== loadRequestIdRef.current) return;
         setTransactions(prev => (replace ? res.data : [...prev, ...res.data]));
         setTotal(res.total);
-      } catch {
-        // lỗi tải dữ liệu
+        setOffset(off);
+      } catch (err: any) {
+        if (reqId !== loadRequestIdRef.current) return;
+        setLoadError(err?.message || 'Không thể tải danh sách giao dịch. Vui lòng thử lại.');
       } finally {
-        setLoading(false);
+        if (reqId === loadRequestIdRef.current) {
+          setLoading(false);
+        }
       }
     },
     [currentUser]
@@ -161,9 +209,8 @@ export default function HomePage() {
   }, [currentUser, filters, fetchTransactions]);
 
   function handleLoadMore() {
-    const newOffset = offset + PAGE_SIZE;
-    setOffset(newOffset);
-    fetchTransactions(filters, newOffset, false);
+    const nextOffset = transactions.length;
+    fetchTransactions(filters, nextOffset, false);
   }
 
   function handleCreated(_t: Transaction) {
@@ -173,31 +220,34 @@ export default function HomePage() {
   }
 
   function handleDeleted(id: number) {
-    const next = transactions.filter(t => t.id !== id);
-    const nextTotal = Math.max(0, total - 1);
-    setTransactions(next);
-    setTotal(nextTotal);
+    setTransactions(prev => {
+      const next = prev.filter(t => t.id !== id);
+      setTotal(t => {
+        const nextTotal = Math.max(0, t - 1);
+        if (next.length === 0 && nextTotal > 0) {
+          fetchTransactions(filters, 0, true);
+        }
+        return nextTotal;
+      });
+      return next;
+    });
     setRefreshKey(k => k + 1);
-
-    // Nếu trang hiện tại không còn phần tử nào nhưng database vẫn còn giao dịch, tự động tải lại offset 0
-    if (next.length === 0 && nextTotal > 0) {
-      setOffset(0);
-      fetchTransactions(filters, 0, true);
-    }
   }
 
   function handleBatchDeleted(deletedIds: number[]) {
     const idSet = new Set(deletedIds);
-    const next = transactions.filter(t => !idSet.has(t.id));
-    const nextTotal = Math.max(0, total - deletedIds.length);
-    setTransactions(next);
-    setTotal(nextTotal);
+    setTransactions(prev => {
+      const next = prev.filter(t => !idSet.has(t.id));
+      setTotal(t => {
+        const nextTotal = Math.max(0, t - deletedIds.length);
+        if (next.length === 0 && nextTotal > 0) {
+          fetchTransactions(filters, 0, true);
+        }
+        return nextTotal;
+      });
+      return next;
+    });
     setRefreshKey(k => k + 1);
-
-    if (next.length === 0 && nextTotal > 0) {
-      setOffset(0);
-      fetchTransactions(filters, 0, true);
-    }
   }
 
   function handleAllDeleted() {
@@ -215,10 +265,15 @@ export default function HomePage() {
   async function handleLogout() {
     const userName = getUserDisplayName(currentUser);
     if (window.confirm(`${userName} có chắc chắn muốn đăng xuất không?`)) {
-      await api.logout();
-      setCurrentUser(null);
-      setStoredUser(null);
-      setTransactions([]);
+      try {
+        await api.logout();
+      } catch (err) {
+        console.error('Logout error:', err);
+      } finally {
+        resetSession();
+        setCurrentUser(null);
+        setStoredUser(null);
+      }
     }
   }
 
@@ -235,9 +290,9 @@ export default function HomePage() {
       {/* Modal đăng nhập / đăng ký nếu chưa có tài khoản */}
       {!currentUser && (
         <AuthModal
-          onSuccess={u => {
+          onSuccess={(u, rememberMe) => {
             setCurrentUser(u);
-            setStoredUser(u);
+            setStoredUser(u, rememberMe);
           }}
         />
       )}
@@ -393,6 +448,17 @@ export default function HomePage() {
             {/* Nội dung các tab — Cơ chế Keep-Alive: Lưu vào RAM khi mở lần đầu, chuyển tab 0ms tức thì */}
             {/* Tab 1: Giao dịch */}
             <div className={activeTab === 'list' ? 'block' : 'hidden'}>
+              {loadError && (
+                <div className="mb-4 p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-2xl flex items-center justify-between text-sm text-rose-800 dark:text-rose-200">
+                  <span>{loadError}</span>
+                  <button
+                    onClick={() => fetchTransactions(filters, 0, true)}
+                    className="px-3 py-1.5 bg-rose-600 text-white rounded-xl text-xs font-semibold hover:bg-rose-700 transition cursor-pointer"
+                  >
+                    Thử lại
+                  </button>
+                </div>
+              )}
               <TransactionList
                 transactions={transactions}
                 total={total}
@@ -411,6 +477,7 @@ export default function HomePage() {
             {visitedTabs['dashboard'] && (
               <div className={activeTab === 'dashboard' ? 'block' : 'hidden'}>
                 <Dashboard
+                  key={currentUser?.id}
                   filters={thisMonthRange()}
                   user={currentUser}
                   onSwitchTab={setActiveTab}
@@ -423,6 +490,7 @@ export default function HomePage() {
             {visitedTabs['budget'] && (
               <div className={activeTab === 'budget' ? 'block' : 'hidden'}>
                 <BudgetManager
+                  key={currentUser?.id}
                   refreshKey={refreshKey}
                   onOpenRecurring={() => setShowRecurring(true)}
                   user={currentUser}
@@ -434,6 +502,7 @@ export default function HomePage() {
             {visitedTabs['debt'] && (
               <div className={activeTab === 'debt' ? 'block' : 'hidden'}>
                 <DebtManager
+                  key={currentUser?.id}
                   refreshKey={refreshKey}
                   user={currentUser}
                 />

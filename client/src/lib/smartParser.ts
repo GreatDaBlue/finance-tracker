@@ -11,6 +11,14 @@ export interface SmartParseResult {
   description: string;      // Văn bản còn lại
 }
 
+export const MAX_SAFE_AMOUNT = 1_000_000_000_000;
+
+export function localTodayISO(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 export const DANH_MUC = [
   'Ăn uống',
   'Xe cộ',
@@ -44,6 +52,37 @@ export function parseSmartInput(text: string): SmartParseResult {
   return { amount, note, description: remaining };
 }
 
+// Nhận diện các đơn vị số lượng / danh từ đếm để bảo vệ số lượng không bị nhầm thành số tiền
+const QTY_UNITS_REGEX = /\b(\d+(?:[.,]\d+)?)\s*(cái|chiếc|bộ|đôi|cặp|bát|tô|chén|đĩa|dĩa|phần|suất|cốc|ly|hộp|gói|bịch|túi|bao|tập|quyển|cuốn|con|quả|trái|cây|bó|nhánh|vé|người|lần|chuyến|bàn|phòng|size|kg|kí|ký|lạng|gam|g|áo|quần|váy|giày|dép|phở|bún|cơm|bánh|cafe|cà phê|trà|móc|chìa|khóa|món|đồ|chú|thùng|két|bình|lọ|lon|cuộn|tấm|miếng|thanh|chai\s+(?:nước|bia|rượu|dầu|mắm|sữa|sting|coca|pepsi)|tép|viên|liều|vỉ|mét|m)\b/giu;
+
+// Nhận diện số lượng đứng ngay sau các động từ mua sắm/tiêu dùng: "mua 2 áo", "gọi 2 phở", "order 2 ly trà"
+const VERB_QTY_REGEX = /(?<=(?:^|[^\p{L}\p{N}])(?:mua|order|gọi|lấy|thêm|đặt)\s+)(\d+)(?=\s+[a-zA-Z\p{L}])/giu;
+
+function protectQuantities(text: string): { protectedText: string; map: string[] } {
+  const map: string[] = [];
+  // 1. Bảo vệ theo đơn vị đo đếm
+  let res = text.replace(QTY_UNITS_REGEX, (match, num, unit) => {
+    const key = `__QTY_${map.length}__`;
+    map.push(num);
+    return `${key} ${unit}`;
+  });
+  // 2. Bảo vệ theo động từ tiêu dùng
+  res = res.replace(VERB_QTY_REGEX, (match, num) => {
+    const key = `__QTY_${map.length}__`;
+    map.push(num);
+    return key;
+  });
+  return { protectedText: res, map };
+}
+
+function unprotectQuantities(text: string, map: string[]): string {
+  let res = text;
+  for (let i = 0; i < map.length; i++) {
+    res = res.replace(new RegExp(`__QTY_${i}__`, 'g'), map[i]);
+  }
+  return res;
+}
+
 /**
  * Parse số tiền với các đơn vị phổ biến và từ ngữ lóng thông dụng trong tiếng Việt:
  *   k, nghìn, ngàn: 20k     → 20,000
@@ -54,68 +93,74 @@ export function parseSmartInput(text: string): SmartParseResult {
  *   20.000 / 20000đ
  */
 export function parseAmount(text: string): { amount: number | null; cleanText: string } {
-  let clean = text;
+  const { protectedText, map } = protectQuantities(text);
+  let clean = protectedText;
 
-  // 1. Các từ chỉ phân nửa: nửa củ (500k), nửa lít (50k), nửa triệu (500k)
-  if (/(?:^|[^\p{L}\p{N}])nửa\s+củ(?![a-zA-Z\p{L}])/iu.test(clean)) {
-    return { amount: 500_000, cleanText: clean.replace(/nửa\s+củ(?![a-zA-Z\p{L}])/iu, '').trim() };
+  const result = (amount: number | null, cleanStr: string) => ({
+    amount,
+    cleanText: unprotectQuantities(cleanStr, map).trim()
+  });
+
+  // 1. Các từ chỉ phân nửa: nửa củ/nửa chai (500k), nửa lít (50k), nửa triệu (500k)
+  if (/(?:^|[^\p{L}\p{N}])nửa\s+(?:củ|chai)(?![a-zA-Z\p{L}])/iu.test(clean)) {
+    return result(500_000, clean.replace(/nửa\s+(?:củ|chai)(?![a-zA-Z\p{L}])/iu, ''));
   }
   if (/(?:^|[^\p{L}\p{N}])nửa\s+lít(?![a-zA-Z\p{L}])/iu.test(clean)) {
-    return { amount: 50_000, cleanText: clean.replace(/nửa\s+lít(?![a-zA-Z\p{L}])/iu, '').trim() };
+    return result(50_000, clean.replace(/nửa\s+lít(?![a-zA-Z\p{L}])/iu, ''));
   }
   if (/(?:^|[^\p{L}\p{N}])nửa\s+(?:triệu|tr)(?![a-zA-Z\p{L}])/iu.test(clean)) {
-    return { amount: 500_000, cleanText: clean.replace(/nửa\s+(?:triệu|tr)(?![a-zA-Z\p{L}])/iu, '').trim() };
+    return result(500_000, clean.replace(/nửa\s+(?:triệu|tr)(?![a-zA-Z\p{L}])/iu, ''));
   }
 
   // 2. Các từ có đuôi "rưỡi": 1 củ rưỡi (1.5tr), 2 lít rưỡi (250k), 1 tr rưỡi (1.5tr)
-  const ruoiCuM = clean.match(/(\d+(?:[.,]\d+)?)\s*củ\s+rưỡi(?![a-zA-Z\p{L}])/iu);
+  const ruoiCuM = clean.match(/(\d+(?:[.,]\d+)?)\s*(?:củ|chai)\s+rưỡi(?![a-zA-Z\p{L}])/iu);
   if (ruoiCuM) {
-    return { amount: (parseViNum(ruoiCuM[1]) + 0.5) * 1_000_000, cleanText: clean.replace(ruoiCuM[0], '').trim() };
+    return result((parseViNum(ruoiCuM[1]) + 0.5) * 1_000_000, clean.replace(ruoiCuM[0], ''));
   }
   const ruoiLitM = clean.match(/(\d+(?:[.,]\d+)?)\s*lít\s+rưỡi(?![a-zA-Z\p{L}])/iu);
   if (ruoiLitM) {
-    return { amount: (parseViNum(ruoiLitM[1]) + 0.5) * 100_000, cleanText: clean.replace(ruoiLitM[0], '').trim() };
+    return result((parseViNum(ruoiLitM[1]) + 0.5) * 100_000, clean.replace(ruoiLitM[0], ''));
   }
   const ruoiTrM = clean.match(/(\d+(?:[.,]\d+)?)\s*(?:triệu|trieu|tr)\s+rưỡi(?![a-zA-Z\p{L}])/iu);
   if (ruoiTrM) {
-    return { amount: (parseViNum(ruoiTrM[1]) + 0.5) * 1_000_000, cleanText: clean.replace(ruoiTrM[0], '').trim() };
+    return result((parseViNum(ruoiTrM[1]) + 0.5) * 1_000_000, clean.replace(ruoiTrM[0], ''));
   }
 
   // 3. Số lẻ kiểu nói tắt: 2tr5 (2.5tr), 1tr2 (1.2tr), 2củ5 (2.5tr)
-  const trLeM = clean.match(/(\d+)\s*(?:tr|củ|m)\s*(\d)(?![a-zA-Z\p{L}\d])/iu);
+  const trLeM = clean.match(/(\d+)\s*(?:tr|củ|chai|m)\s*(\d)(?![a-zA-Z\p{L}\d])/iu);
   if (trLeM) {
     const num = parseFloat(`${trLeM[1]}.${trLeM[2]}`) * 1_000_000;
-    return { amount: num, cleanText: clean.replace(trLeM[0], '').trim() };
+    return result(num, clean.replace(trLeM[0], ''));
   }
 
   // 4. Tỷ: 1tỷ, 1.5tỷ, 1,5ty
   const tyM = clean.match(/(\d+(?:[.,]\d+)?)\s*(?:tỷ|ty|bil(?:lion)?)(?![a-zA-Z\p{L}])/iu);
   if (tyM) {
-    return { amount: parseViNum(tyM[1]) * 1_000_000_000, cleanText: clean.replace(tyM[0], '').trim() };
+    return result(parseViNum(tyM[1]) * 1_000_000_000, clean.replace(tyM[0], ''));
   }
 
-  // 5. Củ (1 củ = 1.000.000): 1 củ, 2 củ, 3.5 củ
-  const cuM = clean.match(/(\d+(?:[.,]\d+)?)\s*củ(?![a-zA-Z\p{L}])/iu);
+  // 5. Củ / Chai (1 củ = 1 chai = 1.000.000): 1 củ, 2 củ, 3.5 củ, 10 chai (loại trừ củ cà rốt, chai nước/bia...)
+  const cuM = clean.match(/(\d+(?:[.,]\d+)?)\s*(?:củ|chai)(?!\s*(?:cà\s+rốt|khoai|sắn|hành|tỏi|gừng|sen|nước|rượu|bia|dầu|mắm))(?![a-zA-Z\p{L}])/iu);
   if (cuM) {
-    return { amount: parseViNum(cuM[1]) * 1_000_000, cleanText: clean.replace(cuM[0], '').trim() };
+    return result(parseViNum(cuM[1]) * 1_000_000, clean.replace(cuM[0], ''));
   }
 
   // 6. Triệu: 2tr, 2m, 2triệu, 1.5tr, 1,5m
   const trM = clean.match(/(\d+(?:[.,]\d+)?)\s*(?:triệu|trieu|tr|m|mil(?:lion)?)(?![a-zA-Z\p{L}])/iu);
   if (trM) {
-    return { amount: parseViNum(trM[1]) * 1_000_000, cleanText: clean.replace(trM[0], '').trim() };
+    return result(parseViNum(trM[1]) * 1_000_000, clean.replace(trM[0], ''));
   }
 
-  // 7. Lít (1 lít = 100.000): 1 lít, 2 lít, 5 lít, 1.5 lít
-  const litM = clean.match(/(\d+(?:[.,]\d+)?)\s*lít(?![a-zA-Z\p{L}])/iu);
+  // 7. Lít (1 lít = 100.000): 1 lít, 2 lít, 5 lít, 1.5 lít (loại trừ lít xăng, lít dầu, lít nước...)
+  const litM = clean.match(/(\d+(?:[.,]\d+)?)\s*lít(?!\s*(?:xăng|dầu|nhớt|nước|sữa))(?![a-zA-Z\p{L}])/iu);
   if (litM) {
-    return { amount: parseViNum(litM[1]) * 100_000, cleanText: clean.replace(litM[0], '').trim() };
+    return result(parseViNum(litM[1]) * 100_000, clean.replace(litM[0], ''));
   }
 
   // 8. Ngàn / Nghìn / k: 20k, 50k, 20nghìn, 50ngàn
   const kM = clean.match(/(?:[\-:\u2013\u2014]\s*)?(\d+(?:[.,]\d+)?)\s*(?:k|nghìn|nghin|ngàn|ngan)(?![a-zA-Z0-9\p{L}])/iu);
   if (kM) {
-    return { amount: parseViNum(kM[1]) * 1_000, cleanText: clean.replace(kM[0], '').trim() };
+    return result(parseViNum(kM[1]) * 1_000, clean.replace(kM[0], ''));
   }
 
   // 9. Có đơn vị đồng/đ/vnd: 20000đ, 20.000đ, 20.000 đồng
@@ -123,33 +168,42 @@ export function parseAmount(text: string): { amount: number | null; cleanText: s
   const dongM = clean.match(dongRx);
   if (dongM) {
     const num = parseInt(dongM[1].replace(/\./g, ''), 10);
-    return { amount: num, cleanText: clean.replace(dongM[0], '').trim() };
+    return result(num, clean.replace(dongM[0], ''));
   }
 
-  // 10. Số có dấu chấm ngăn cách kiểu Việt: 20.000, 1.000.000 (kèm hoặc không kèm đ/đồng)
-  const fmtRx = /(?:[\-:\u2013\u2014]\s*)?\b(\d{1,3}(?:\.\d{3})+)(?:\s*(?:đồng|dong|đ|vnd))?(?![a-zA-Z0-9\p{L}])/iu;
+  // 10. Số có dấu chấm ngăn cách kiểu Việt: 20.000, 1.000.000, 155.000 (kèm hoặc không kèm đ/đồng)
+  // Có lookbehind và lookahead chống nhầm với ngày tháng như 19/08/2026
+  const fmtRx = /(?:[\-:\u2013\u2014]\s*)?(?<![\/\-\.\d])(\d{1,3}(?:\.\d{3})+)(?:\s*(?:đồng|dong|đ|vnd))?(?![\/\-\.\d])/iu;
   const fmtM = clean.match(fmtRx);
   if (fmtM) {
     const num = parseInt(fmtM[1].replace(/\./g, ''), 10);
-    return { amount: num, cleanText: clean.replace(fmtM[0], '').trim() };
+    return result(num, clean.replace(fmtM[0], ''));
   }
 
-  // 11. Số nguyên thông thường từ 4 chữ số trở lên: 40000, 25000 (tránh nhầm với số thứ tự hay ngày tháng)
-  const plainNumRx = /(?:[\-:\u2013\u2014]\s*)?\b(\d{4,12})(?:\s*(?:đồng|dong|đ|vnd))?(?![a-zA-Z0-9\p{L}])/iu;
+  // 11. Số có khoảng trắng ngăn cách hàng ngàn: 155 000, 1 000 000
+  const spaceFmtRx = /(?:[\-:\u2013\u2014]\s*)?(?<![\/\-\.\d])(\d{1,3}(?:\s+\d{3})+)(?:\s*(?:đồng|dong|đ|vnd))?(?![\/\-\.\d])/iu;
+  const spaceM = clean.match(spaceFmtRx);
+  if (spaceM) {
+    const num = parseInt(spaceM[1].replace(/\s+/g, ''), 10);
+    return result(num, clean.replace(spaceM[0], ''));
+  }
+
+  // 12. Số nguyên thông thường từ 4 chữ số trở lên: 40000, 25000 (loại trừ ngày tháng như 2026 trong 19/08/2026)
+  const plainNumRx = /(?:[\-:\u2013\u2014]\s*)?(?<![\/\-\.\d])(\d{4,12})(?:\s*(?:đồng|dong|đ|vnd))?(?![\/\-\.\d])/iu;
   const plainM = clean.match(plainNumRx);
   if (plainM) {
     const num = parseInt(plainM[1], 10);
-    return { amount: num, cleanText: clean.replace(plainM[0], '').trim() };
+    return result(num, clean.replace(plainM[0], ''));
   }
 
-  return { amount: null, cleanText: clean };
+  return result(null, clean);
 }
 
 /**
  * Parse số kiểu Việt: "1,5" → 1.5 (thập phân), "20.000" → 20000 (không phải thập phân)
  */
 function parseViNum(str: string): number {
-  if (/^\d+,\d{1,2}$/.test(str)) {
+  if (/^\d+[.,]\d{1,2}$/.test(str)) {
     return parseFloat(str.replace(',', '.'));
   }
   return parseFloat(str.replace(/\./g, '').replace(',', '.'));
@@ -167,10 +221,12 @@ export function formatAmountDisplay(amount: number): string {
  */
 export function parseAmountInput(raw: string): number {
   if (!raw.trim()) return 0;
+  if (/^\s*-/.test(raw)) return 0; // Chặn số âm
   const { amount } = parseAmount(raw);
-  if (amount !== null) return amount;
+  if (amount !== null) return Math.min(amount, MAX_SAFE_AMOUNT);
   const digits = raw.replace(/\./g, '').replace(/[^\d]/g, '');
-  return parseInt(digits, 10) || 0;
+  const parsed = parseInt(digits, 10) || 0;
+  return Math.min(parsed, MAX_SAFE_AMOUNT);
 }
 
 export interface ParsedDateResult {
@@ -345,8 +401,8 @@ export function cleanDescriptionText(text: string): string {
   // Loại bỏ các đơn vị tiền tệ hoặc dấu gạch nối tiền bị sót: " - đ", " - đồng", "đ", "vnd"
   res = res.replace(/[\s:\-\u2013\u2014]+(?:đồng|dong|đ|vnd)(?![a-zA-Z0-9\p{L}])/giu, '');
   res = res.replace(/(?:^|\s)(?:đồng|dong|đ|vnd)$/giu, '');
-  // Loại bỏ số thứ tự ở đầu như "1. ", "2) ", "1- "
-  res = res.replace(/^\s*\d+[\.\)\-:]\s*/, '');
+  // Loại bỏ số thứ tự ở đầu như "1. ", "2) ", "1- " (chỉ xóa khi theo sau là khoảng trắng VÀ chữ cái, tránh xóa nhầm số tiền như "155.000")
+  res = res.replace(/^\s*\d{1,3}[\.\)\-:]\s+(?=[a-zA-Z\p{L}])/u, '');
   // Loại bỏ từ đệm đầu/cuối: "hết", "mất", "được", "tầm", v.v.
   res = cleanFillerWords(res);
   // Gom các dấu gạch nối liên tiếp "--", " - - " thành " - "
@@ -450,11 +506,12 @@ export function guessCategoryAndType(text: string): { type: 'income' | 'expense'
   }
 
   // 2. Nhận diện các khoản thu nhập rõ ràng khác
-  const hasDirectIncomeWord = matchViWords(lower, 'lương|salary|thưởng|bonus|thu nhập|cổ tức|lãi|lãi suất|freelance|nhận tiền|tiền vào|được tặng|lì xì|trúng thưởng|hoàn tiền|tiền hoàn|hoàn lại|hoàn trả|cashback|nhận hoàn|tiền về|ting ting|thu nợ|đòi nợ|\\+');
+  const hasDirectIncomeWord = matchViWords(lower, 'lương|salary|thưởng|bonus|thu nhập|cổ tức|lãi|lãi suất|freelance|nhận tiền|tiền vào|được tặng|lì xì|trúng thưởng|hoàn tiền|tiền hoàn|hoàn lại|hoàn trả|cashback|nhận hoàn|tiền về|ting ting|thu nợ|đòi nợ');
+  const hasPlusAmount = /(?:^|\s)\+\s*\d+/i.test(trimmed); // Chỉ khi dấu + đứng trước số tiền (ví dụ +100k) mới tính là thu nhập
   const isSelling = matchViWords(lower, 'bán|thanh lý|sang nhượng') && !matchViWords(lower, 'mua|quán|tiệm|chỗ|hàng');
   const isReceiving = matchViWords(lower, 'nhận|kiếm được|thu được') && !matchViWords(lower, 'nhận phòng|nhận hàng');
 
-  if (hasDirectIncomeWord || isSelling || isReceiving) {
+  if (hasDirectIncomeWord || hasPlusAmount || isSelling || isReceiving) {
     if (matchViWords(lower, 'lương|salary|thưởng|bonus')) {
       return { type: 'income', category: 'Thu nhập lương' };
     }
@@ -662,15 +719,18 @@ export function detectHeaderDirective(line: string): HeaderDirectiveResult | nul
   }
 
   // 3. Tiêu đề chỉ thị Thu / Chi và Tháng / Năm:
-  // Ví dụ: 'Đây là dữ liệu chi tháng 8', 'Bảng chi tiêu tháng 8/2026', 'Khoản thu tháng 8:', 'Chi tiêu tháng 8'
-  const directiveRx = /^(?:(?:\d+[\.\)\-:]\s*)?(?:đây\s+là\s+|tất\s+cả\s+là\s+|toàn\s+bộ\s+là\s+)?(?:dữ\s+liệu|danh\s+sách|bảng|các\s+khoản|khoản|phần)?\s*)?(chi\s+tiêu|chi|thu\s+nhập|thu|tiền\s+vào|tiền\s+ra)(?:\s+(?:cá\s+nhân|gia\s+đình|sinh\s+hoạt))?(?:\s+(?:tháng|thg)\s*(\d{1,2}))?(?:\s*(?:năm|\/|-)\s*(\d{4}))?[:\s]*$/iu;
+  // Ví dụ: 'Đây là dữ liệu chi tháng 8', 'Bảng chi tiêu tháng 8/2026', 'Khoản thu tháng 8:', 'Chi tiêu tháng 8', 'Danh sách khoản thu tháng này'
+  const directiveRx = /^(?:(?:\d+[\.\)\-:]\s*)?(?:đây\s+là\s+|tất\s+cả\s+là\s+|toàn\s+bộ\s+là\s+)?(?:dữ\s+liệu|danh\s+sách|bảng|các|tổng\s+hợp)?\s*(?:các\s+khoản|khoản|mục|phần)?\s*)?(chi\s+tiêu|chi|thu\s+nhập|thu|tiền\s+vào|tiền\s+ra)(?:\s+(?:cá\s+nhân|gia\s+đình|sinh\s+hoạt))?(?:\s+(?:tháng|thg)\s*(\d{1,2}|này))?(?:\s*(?:năm|\/|-)\s*(\d{4}))?[:\s]*$/iu;
   const m = t.match(directiveRx);
   if (m) {
     const rawType = m[1].toLowerCase();
     const isIncome = rawType.includes('thu') || rawType.includes('tiền vào');
     const isExpense = rawType.includes('chi') || rawType.includes('tiền ra');
     const type = isIncome ? 'income' : (isExpense ? 'expense' : undefined);
-    const month = m[2] ? parseInt(m[2], 10) : undefined;
+    let month: number | undefined;
+    if (m[2]) {
+      month = m[2].toLowerCase() === 'này' ? new Date().getMonth() + 1 : parseInt(m[2], 10);
+    }
     const year = m[3] ? parseInt(m[3], 10) : undefined;
     return { isHeader: true, isDirective: true, type, month, year, text: t };
   }
@@ -692,7 +752,7 @@ export function detectHeaderDirective(line: string): HeaderDirectiveResult | nul
  */
 export function parseMultiSmartInput(
   rawText: string,
-  defaultDate: string = new Date().toISOString().split('T')[0],
+  defaultDate: string = localTodayISO(),
   defaultType?: 'expense' | 'income'
 ): ParsedTransactionItem[] {
   const trimmed = rawText.trim();
@@ -703,8 +763,8 @@ export function parseMultiSmartInput(
     return match.replace(/,/g, '__COMMA__').replace(/;/g, '__SEMI__');
   });
 
-  // 2. Tách theo dấu ngắt mệnh đề: xuống dòng, chấm phẩy, dấu phẩy (không nằm giữa 2 số), hoặc từ nối "và", "rồi", "+"
-  const clauseRegex = /(?:[\r\n;]+|(?<!\d),(?!\d)|\s+(?:và|rồi|\+)\s+)/i;
+  // 2. Tách theo dấu ngắt mệnh đề: xuống dòng, chấm phẩy, dấu phẩy (không nằm giữa 2 số), hoặc từ nối "và", "rồi"
+  const clauseRegex = /(?:[\r\n;]+|(?<!\d),(?!\d)|\s+(?:và|rồi)\s+)/i;
   const rawClauses = protectedText.split(clauseRegex);
 
   let currentContextDate = defaultDate;
@@ -872,18 +932,242 @@ function parseExplicitTypeCell(raw: string): 'income' | 'expense' | null {
   return null;
 }
 
-function parsePartAmountCell(raw: string): number | null {
+export interface AmountCellEvaluation {
+  amount: number;
+  score: number; // 100: có k/tr/triệu/tỷ/củ/chai/lít; 95: có đ/đồng/vnd; 90: số format 155.000; 70: số nguyên >= 1000; 40: số nguyên 101-999; 10: số nguyên <= 100
+  raw: string;
+}
+
+export function evaluatePartAmountCell(raw: string): AmountCellEvaluation | null {
   if (!raw) return null;
   const t = raw.trim();
-  const mK = t.match(/^(\d+(?:[.,]\d+)?)\s*(?:k|nghìn|ngàn)$/i);
-  if (mK) return parseFloat(mK[1].replace(',', '.')) * 1000;
-  const mTr = t.match(/^(\d+(?:[.,]\d+)?)\s*(?:tr|triệu|m|củ)$/i);
-  if (mTr) return parseFloat(mTr[1].replace(',', '.')) * 1000000;
-  const mLit = t.match(/^(\d+(?:[.,]\d+)?)\s*lít$/i);
-  if (mLit) return parseFloat(mLit[1].replace(',', '.')) * 100000;
-  const digits = t.replace(/\./g, '').replace(/,/g, '').replace(/[^\d]/g, '');
-  if (/^\d+$/.test(digits) && parseInt(digits, 10) > 0) return parseInt(digits, 10);
+  if (!t) return null;
+
+  // 1. Nếu ô chứa chữ cái tiếng Việt/Latin KHÔNG PHẢI đơn vị tiền tệ (ví dụ "Mua 2 cái áo", "2 bát phở"),
+  // thì đây là MÔ TẢ (description), TUYỆT ĐỐI KHÔNG coi là ô số tiền!
+  const nonCurrencyLetters = t
+    .replace(/^[\+\-:\u2013\u2014\s]+/, '')
+    .replace(/[\d.,\s]/g, '')
+    .replace(/^(?:khoảng|tầm|hết|mất)\s+/iu, '')
+    .replace(/(?:đồng|dong|đ|d|vnd|₫|k|nghìn|nghin|ngàn|ngan|triệu|trieu|tr|m|củ|cu|chai|lít|lit|tỷ|ty)$/iu, '')
+    .trim();
+
+  if (/[a-zA-Z\p{L}]/u.test(nonCurrencyLetters)) {
+    return null;
+  }
+
+  // 2. Định dạng có hậu tố tiền tệ rõ ràng:
+  // k, nghìn, ngàn
+  const mK = t.match(/^[\+\-]?\s*(\d+(?:[.,]\d+)?)\s*(?:k|nghìn|nghin|ngàn|ngan)(?:\s*(?:đ|đồng|dong|vnd|₫))?$/iu);
+  if (mK) {
+    const val = Math.min(Math.round(parseFloat(mK[1].replace(',', '.')) * 1000), MAX_SAFE_AMOUNT);
+    return { amount: val, score: 100, raw: t };
+  }
+
+  // tr, triệu, m, củ, chai
+  const mTr = t.match(/^[\+\-]?\s*(\d+(?:[.,]\d+)?)\s*(?:tr|triệu|trieu|m|củ|cu|chai)(?:\s*(?:đ|đồng|dong|vnd|₫))?$/iu);
+  if (mTr) {
+    const val = Math.min(Math.round(parseFloat(mTr[1].replace(',', '.')) * 1000000), MAX_SAFE_AMOUNT);
+    return { amount: val, score: 100, raw: t };
+  }
+
+  // lít (100k)
+  const mLit = t.match(/^[\+\-]?\s*(\d+(?:[.,]\d+)?)\s*(?:lít|lit)(?:\s*(?:đ|đồng|dong|vnd|₫))?$/iu);
+  if (mLit) {
+    const val = Math.min(Math.round(parseFloat(mLit[1].replace(',', '.')) * 100000), MAX_SAFE_AMOUNT);
+    return { amount: val, score: 100, raw: t };
+  }
+
+  // tỷ
+  const mTy = t.match(/^[\+\-]?\s*(\d+(?:[.,]\d+)?)\s*(?:tỷ|ty)(?:\s*(?:đ|đồng|dong|vnd|₫))?$/iu);
+  if (mTy) {
+    const val = Math.min(Math.round(parseFloat(mTy[1].replace(',', '.')) * 1000000000), MAX_SAFE_AMOUNT);
+    return { amount: val, score: 100, raw: t };
+  }
+
+  // Có đơn vị đồng, đ, vnd rõ ràng (ví dụ 20000đ, 20.000 đ, 2đ)
+  const mDong = t.match(/^[\+\-]?\s*(\d[\d.,\s]*)\s*(?:đồng|dong|đ|vnd|₫)$/iu);
+  if (mDong) {
+    const cleanDigits = mDong[1].replace(/[.,\s]/g, '');
+    const num = parseInt(cleanDigits, 10);
+    if (!isNaN(num) && num > 0) {
+      return { amount: Math.min(num, MAX_SAFE_AMOUNT), score: 95, raw: t };
+    }
+  }
+
+  // 3. Định dạng số kiểu Việt có dấu chấm/phẩy/khoảng trắng ngăn cách hàng ngàn: 155.000, 155,000, 155 000
+  const mFmt = t.match(/^[\+\-]?\s*(\d{1,3}(?:[.,\s]\d{3})+)(?:\s*(?:đồng|dong|đ|vnd|₫))?$/iu);
+  if (mFmt) {
+    const cleanDigits = mFmt[1].replace(/[.,\s]/g, '');
+    const num = parseInt(cleanDigits, 10);
+    if (!isNaN(num) && num > 0) {
+      return { amount: Math.min(num, MAX_SAFE_AMOUNT), score: 90, raw: t };
+    }
+  }
+
+  // 4. Số nguyên thuần túy (chỉ chứa các chữ số từ 1 đến 12 chữ số)
+  const mPure = t.match(/^[\+\-]?\s*(\d{1,12})$/);
+  if (mPure) {
+    const num = parseInt(mPure[1], 10);
+    if (!isNaN(num) && num > 0) {
+      // Số lớn >= 1000: khả năng cao là số tiền (ví dụ 40000, 25000, 1000) -> score 70
+      // Số vừa 101 - 999 -> score 40
+      // Số nhỏ <= 100 (như 1, 2, 3...): Rất có thể là Số Lượng (Quantity) hoặc Số Thứ Tự (STT)! -> score 10
+      let score = 10;
+      if (num >= 1000) score = 70;
+      else if (num > 100) score = 40;
+      return { amount: Math.min(num, MAX_SAFE_AMOUNT), score, raw: t };
+    }
+  }
+
   return null;
+}
+
+export function parsePartAmountCell(raw: string): number | null {
+  const evalCell = evaluatePartAmountCell(raw);
+  if (!evalCell) return null;
+  // Nếu là số nguyên trần <= 100 không có đơn vị rõ ràng (score <= 10), không coi là số tiền độc lập
+  if (evalCell.score <= 10) return null;
+  return evalCell.amount;
+}
+
+export interface DateAmountLineResult {
+  date: string;
+  amount: number;
+  description: string;
+  explicitType: 'income' | 'expense' | null;
+}
+
+/**
+ * Bóc tách theo cấu trúc cố định "Ngày ở đầu — Mô tả ở giữa — Số tiền ở cuối".
+ * Thứ tự ưu tiên:
+ *   1. Ngày tháng ở ĐẦU dòng (DD/MM/YYYY hoặc DD/MM)
+ *   2. Số tiền ở CUỐI dòng (50.000 | 1.005.000 | 50k | 2tr | 1,5tr | 20000đ | 40000)
+ *   3. Toàn bộ phần nằm giữa là Mô tả (giữ nguyên số bên trong như "lần 2", "2 cái áo")
+ * Trả về null nếu dòng không khớp cấu trúc → để các bộ parse khác xử lý.
+ */
+export function parseDateAmountLine(
+  line: string,
+  ctx: { contextYear: number | null }
+): DateAmountLineResult | null {
+  const t = line.replace(/[\u00A0\u2007\u202F]/g, ' ').trim();
+
+  // Bước 1: Ngày ở đầu dòng
+  const dateM = t.match(/^(\d{1,2})[\/\-.](\d{1,2})(?:[\/\-.](\d{4}))?(?:\s*[-–—:,;|]\s*|\s+)/);
+  if (!dateM) return null;
+  const day = parseInt(dateM[1], 10);
+  const month = parseInt(dateM[2], 10);
+  if (day < 1 || day > 31 || month < 1 || month > 12) return null;
+  const year = dateM[3] ? parseInt(dateM[3], 10) : (ctx.contextYear || new Date().getFullYear());
+  const date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  const rest = t.slice(dateM[0].length);
+
+  // Bước 2: Số tiền ở cuối dòng (bắt buộc có khoảng trắng / dấu phân cách đứng trước)
+  const amtM = rest.match(
+    /(?:^|[\s\-–—:,;|]+)\+?(\d{1,3}(?:[.,]\d{3})+|\d+(?:[.,]\d+)?)\s*(k|nghìn|nghin|ngàn|ngan|tr|triệu|trieu|m|củ|tỷ|ty|đ|đồng|dong|vnd|₫)?\s*$/iu
+  );
+  if (!amtM) return null;
+  const numStr = amtM[1];
+  const unit = (amtM[2] || '').toLowerCase();
+  const hasThousandSep = /^\d{1,3}(?:[.,]\d{3})+$/.test(numStr);
+
+  let amount: number;
+  if (['k', 'nghìn', 'nghin', 'ngàn', 'ngan'].includes(unit)) {
+    amount = parseViNum(numStr) * 1_000;
+  } else if (['tr', 'triệu', 'trieu', 'm', 'củ'].includes(unit)) {
+    amount = parseViNum(numStr) * 1_000_000;
+  } else if (['tỷ', 'ty'].includes(unit)) {
+    amount = parseViNum(numStr) * 1_000_000_000;
+  } else {
+    // Không có hậu tố hệ số: chỉ chấp nhận số nguyên (bỏ dấu . , phân cách hàng nghìn)
+    if (!hasThousandSep && !/^\d+$/.test(numStr)) return null;
+    amount = parseInt(numStr.replace(/[.,]/g, ''), 10);
+    // Số trần nhỏ < 1.000 không kèm đơn vị (vd "lần 2") là số lượng/thứ tự, không phải tiền
+    if (!unit && !hasThousandSep && amount < 1000) return null;
+  }
+  amount = Math.round(amount);
+  if (!isFinite(amount) || amount <= 0) return null;
+  amount = Math.min(amount, MAX_SAFE_AMOUNT);
+
+  // Bước 3: Phần giữa là mô tả
+  let middle = rest.slice(0, rest.length - amtM[0].length).trim();
+
+  // Cột loại Thu/Chi (nếu có) ở đầu hoặc cuối phần giữa, vd "Chi  Ăn sáng" / "Ăn sáng, chi"
+  let explicitType: 'income' | 'expense' | null = null;
+  const typeTok = '(thu nhập|thu|chi tiêu|chi|income|expense|tiền vào|tiền ra)';
+  const lead = middle.match(new RegExp(`^${typeTok}(?:\\s*[,;|\\t]\\s*|\\s{2,}|\\s+[-–—]\\s+)`, 'iu'));
+  if (lead) {
+    explicitType = parseExplicitTypeCell(lead[1]);
+    middle = middle.slice(lead[0].length);
+  } else {
+    const trail = middle.match(new RegExp(`(?:\\s*[,;|\\t]\\s*|\\s{2,}|\\s+[-–—]\\s+)${typeTok}$`, 'iu'));
+    if (trail) {
+      explicitType = parseExplicitTypeCell(trail[1]);
+      middle = middle.slice(0, middle.length - trail[0].length);
+    }
+  }
+
+  const description = cleanDescriptionText(middle.replace(/\s+/g, ' '));
+  return { date, amount, description, explicitType };
+}
+
+/**
+ * Tiền xử lý: Tự động ghép nối các dòng bị ngắt dòng do copy từ bảng hẹp hoặc word wrap
+ * Ví dụ:
+ *   Dòng 1: "19/08/2026   Mua 2 cái áo mới + móc chìa"
+ *   Dòng 2: "khóa   155.000"
+ * Sẽ được tự động nối lại thành:
+ *   "19/08/2026   Mua 2 cái áo mới + móc chìa khóa   155.000"
+ */
+export function stitchBrokenLines(rawLines: string[]): string[] {
+  const stitched: string[] = [];
+
+  function startsWithDateOrDirective(line: string): boolean {
+    const t = line.trim();
+    if (detectHeaderDirective(t)) return true;
+    if (/^(?:(?:ngày|hôm|vào)\s+)?(?:\d{1,2}[\/\-\.]\d{1,2}(?:[\/\-\.]\d{4})?|\d{4}-\d{2}-\d{2})\b/i.test(t)) return true;
+    if (/^(?:hôm\s*(?:nay|qua|kia)|bữa\s*(?:nay|qua|kia)|nay|hnay|hqua|tối\s*qua|sáng\s*(?:nay|qua)|thứ\s+[2-7]|chủ\s*nhật|cn)\b/i.test(t)) return true;
+    return false;
+  }
+
+  function hasValidAmount(line: string): boolean {
+    const { amount } = parseAmount(line);
+    if (amount !== null && amount > 0) return true;
+    const parts = line.split(/[\t;,]|\s+[-–—]\s+|\s{2,}/).map(s => s.trim()).filter(Boolean);
+    for (const p of parts) {
+      const evalCell = evaluatePartAmountCell(p);
+      if (evalCell && evalCell.amount > 0 && evalCell.score >= 40) return true;
+    }
+    return false;
+  }
+
+  for (let i = 0; i < rawLines.length; i++) {
+    const current = rawLines[i].trim();
+    if (!current) continue;
+
+    if (stitched.length > 0 && !startsWithDateOrDirective(current)) {
+      const prevIdx = stitched.length - 1;
+      const prevLine = stitched[prevIdx];
+      const prevHasAmount = hasValidAmount(prevLine);
+      const currHasAmount = hasValidAmount(current);
+
+      // Trường hợp 1: Dòng trước có ngày/nội dung nhưng CHƯA có số tiền, dòng hiện tại CÓ số tiền
+      if (!prevHasAmount && currHasAmount) {
+        stitched[prevIdx] = `${prevLine} ${current}`;
+        continue;
+      }
+
+      // Trường hợp 2: Dòng trước kết thúc bằng dấu nối dở dang (+, -, /, và, với...)
+      if (/[\+\-\/&]\s*$/i.test(prevLine) || /\s+(?:và|với|cùng|hoặc|\+)\s*$/i.test(prevLine)) {
+        stitched[prevIdx] = `${prevLine} ${current}`;
+        continue;
+      }
+    }
+
+    stitched.push(current);
+  }
+
+  return stitched;
 }
 
 /**
@@ -893,8 +1177,9 @@ function parsePartAmountCell(raw: string): number | null {
  * - Định dạng phân cách 'Ngày - Tên chi tiêu - Số tiền'
  * - Chỉ thị ngữ cảnh: "Đây là dữ liệu chi tháng 8", "Dữ liệu thu tháng 8/2026", "Khoản chi:"
  */
-export function parseBatchTransactions(content: string, defaultDate: string = new Date().toISOString().split('T')[0]): BatchParseResult {
-  const lines = content.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+export function parseBatchTransactions(content: string, defaultDate: string = localTodayISO()): BatchParseResult {
+  const rawLines = content.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const lines = stitchBrokenLines(rawLines);
   const rows: BatchParsedRow[] = [];
 
   let contextType: 'income' | 'expense' | null = null;
@@ -930,9 +1215,25 @@ export function parseBatchTransactions(content: string, defaultDate: string = ne
       cleanLine = cleanLine.replace(noteM[0], ' ').trim();
     }
 
-    // 2. Kiểm tra nếu có phân cách cột (tab, phẩy, chấm phẩy, hoặc ' - ')
+    let date: string | null = null;
+    let amount: number | null = null;
+    let explicitType: 'income' | 'expense' | null = null;
+    let description = '';
+
+    // 2a. Ưu tiên cấu trúc "Ngày (đầu) — Mô tả (giữa) — Số tiền (cuối)"
+    const fixed = parseDateAmountLine(cleanLine, { contextYear });
+    if (fixed) {
+      date = fixed.date;
+      amount = fixed.amount;
+      description = fixed.description;
+      explicitType = fixed.explicitType;
+    }
+
+    // 2b. Kiểm tra nếu có phân cách cột (tab, phẩy, chấm phẩy, hoặc ' - ')
     let parts: string[] = [];
-    if (cleanLine.includes('\t')) {
+    if (fixed) {
+      // Đã bóc tách xong, bỏ qua phân tách cột
+    } else if (cleanLine.includes('\t')) {
       parts = cleanLine.split('\t').map(s => s.trim()).filter(Boolean);
     } else if (cleanLine.includes(';') && !cleanLine.includes(',')) {
       parts = cleanLine.split(';').map(s => s.trim()).filter(Boolean);
@@ -940,31 +1241,73 @@ export function parseBatchTransactions(content: string, defaultDate: string = ne
       parts = cleanLine.split(',').map(s => s.trim()).filter(Boolean);
     } else if (/\s+[-–—]\s+/.test(cleanLine)) {
       parts = cleanLine.split(/\s+[-–—]\s+/).map(s => s.trim()).filter(Boolean);
+    } else if (/\s{2,}/.test(cleanLine)) {
+      parts = cleanLine.split(/\s{2,}/).map(s => s.trim()).filter(Boolean);
     }
 
-    let date: string | null = null;
-    let amount: number | null = null;
-    let explicitType: 'income' | 'expense' | null = null;
-    let description = '';
-
     if (parts.length >= 2) {
-      const descTokens: string[] = [];
-      for (const p of parts) {
-        if (!date && parseExplicitDateWithCtx(p, { contextMonth, contextYear })) {
-          date = parseExplicitDateWithCtx(p, { contextMonth, contextYear });
+      let dateCandidate: string | null = null;
+      let typeCandidate: 'income' | 'expense' | null = null;
+      const amountCandidates: { index: number; evaluation: AmountCellEvaluation }[] = [];
+      const otherIndices: number[] = [];
+
+      for (let idx = 0; idx < parts.length; idx++) {
+        const p = parts[idx];
+
+        // 1. Kiểm tra ngày
+        if (!dateCandidate) {
+          const d = parseExplicitDateWithCtx(p, { contextMonth, contextYear });
+          if (d) {
+            dateCandidate = d;
+            continue;
+          }
+        }
+
+        // 2. Kiểm tra loại thu/chi
+        if (!typeCandidate) {
+          const t = parseExplicitTypeCell(p);
+          if (t) {
+            typeCandidate = t;
+            continue;
+          }
+        }
+
+        // 3. Đánh giá số tiền
+        const evalAmt = evaluatePartAmountCell(p);
+        if (evalAmt && evalAmt.amount > 0) {
+          amountCandidates.push({ index: idx, evaluation: evalAmt });
           continue;
         }
-        if (amount === null && parsePartAmountCell(p) !== null) {
-          amount = parsePartAmountCell(p);
-          continue;
-        }
-        if (!explicitType && parseExplicitTypeCell(p)) {
-          explicitType = parseExplicitTypeCell(p);
-          continue;
-        }
-        descTokens.push(p);
+
+        otherIndices.push(idx);
       }
-      description = cleanDescriptionText(descTokens.join(' - '));
+
+      // Chọn ứng viên số tiền tốt nhất:
+      // Sắp xếp theo score giảm dần, sau đó theo giá trị amount giảm dần
+      if (amountCandidates.length > 0) {
+        amountCandidates.sort((a, b) => {
+          if (b.evaluation.score !== a.evaluation.score) {
+            return b.evaluation.score - a.evaluation.score;
+          }
+          return b.evaluation.amount - a.evaluation.amount;
+        });
+
+        // Ứng viên số tiền số 1 được chọn
+        const best = amountCandidates[0];
+        amount = best.evaluation.amount;
+
+        // Các ô số còn lại (ví dụ số lượng, STT) bị coi là mô tả, đưa vào otherIndices
+        for (let i = 1; i < amountCandidates.length; i++) {
+          otherIndices.push(amountCandidates[i].index);
+        }
+      }
+
+      // Giữ đúng thứ tự ban đầu của các cột mô tả
+      otherIndices.sort((a, b) => a - b);
+      const descParts = otherIndices.map(i => parts[i]);
+      description = cleanDescriptionText(descParts.join(' - '));
+      if (dateCandidate) date = dateCandidate;
+      if (typeCandidate) explicitType = typeCandidate;
     }
 
     // Nếu không phân tách cột được, hoặc câu tự nhiên liền nhau: "01/08/2026 nhận tiền hoàn techcombank 100k"

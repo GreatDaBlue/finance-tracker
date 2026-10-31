@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { api } from '../lib/api';
+import { api, todayISO } from '../lib/api';
 import {
   parseBatchTransactions,
   formatAmountDisplay,
@@ -24,14 +24,23 @@ export default function ImportModal({ onImported, onClose }: Props) {
   const [done, setDone] = useState(false);
   const [importedCount, setImportedCount] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  function handleClose() {
+    if (importing) return;
+    onClose();
+  }
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && !importing) onClose();
     }
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    };
+  }, [onClose, importing]);
 
   // Xử lý chuỗi văn bản thông minh (từ file CSV/TXT hoặc từ ô dán trực tiếp)
   function processContent(content: string, sourceName = '') {
@@ -44,7 +53,7 @@ export default function ImportModal({ onImported, onClose }: Props) {
       return;
     }
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayISO();
     const { rows: parsed, directiveSummary: detected } = parseBatchTransactions(content, today);
     setRows(parsed);
     setDirectiveSummary(detected);
@@ -59,32 +68,32 @@ export default function ImportModal({ onImported, onClose }: Props) {
       processContent(text, file.name);
     };
     reader.readAsText(file, 'utf-8');
+    e.target.value = '';
   }
 
   async function handleImport() {
     const valid = rows.filter(r => r.valid);
-    if (!valid.length) return;
+    if (!valid.length || importing) return;
     setImporting(true);
-    let count = 0;
-    for (const row of valid) {
-      try {
-        await api.createTransaction({
-          type: row.type,
-          amount: row.amount,
-          description: row.description,
-          category: row.category || undefined,
-          note: row.note,
-          date: row.date,
-        });
-        count++;
-      } catch {
-        // Tiếp tục import các dòng khác nếu 1 dòng lỗi
-      }
+    try {
+      const res = await api.createBatchTransactions(
+        valid.map(r => ({
+          type: r.type,
+          amount: r.amount,
+          description: r.description,
+          category: r.category || undefined,
+          note: r.note,
+          date: r.date,
+        }))
+      );
+      setImportedCount(res.count);
+      setDone(true);
+      onImported();
+    } catch (err: any) {
+      alert(err?.message || 'Có lỗi xảy ra khi nhập dữ liệu');
+    } finally {
+      setImporting(false);
     }
-    setImportedCount(count);
-    setImporting(false);
-    setDone(true);
-    onImported();
   }
 
   const validCount = rows.filter(r => r.valid).length;
@@ -92,11 +101,11 @@ export default function ImportModal({ onImported, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 dark:bg-black/75 flex items-center justify-center z-50 p-4 cursor-pointer"
-      onClick={onClose}
+      className="fixed inset-0 bg-black/60 dark:bg-black/75 flex items-start sm:items-center justify-center z-50 p-4 cursor-pointer overflow-y-auto"
+      onClick={handleClose}
     >
       <div
-        className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-slate-100 dark:border-zinc-800 w-full max-w-2xl max-h-[90vh] flex flex-col transition-colors cursor-default"
+        className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-slate-100 dark:border-zinc-800 w-full max-w-2xl max-h-[90dvh] flex flex-col transition-colors cursor-default my-auto"
         onClick={e => e.stopPropagation()}
       >
 
@@ -111,7 +120,7 @@ export default function ImportModal({ onImported, onClose }: Props) {
               <p className="text-xs text-slate-400 dark:text-zinc-400">Hỗ trợ file .CSV, .TXT hoặc dán trực tiếp</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl transition-colors">
+          <button onClick={handleClose} disabled={importing} className="p-2 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl transition-colors cursor-pointer disabled:opacity-50">
             <X className="w-5 h-5 text-slate-400 dark:text-zinc-500" />
           </button>
         </div>
@@ -178,8 +187,12 @@ export default function ImportModal({ onImported, onClose }: Props) {
                 rows={6}
                 value={rawText}
                 onChange={e => {
-                  setRawText(e.target.value);
-                  processContent(e.target.value, 'Văn bản dán trực tiếp');
+                  const val = e.target.value;
+                  setRawText(val);
+                  if (debounceTimer.current) clearTimeout(debounceTimer.current);
+                  debounceTimer.current = setTimeout(() => {
+                    processContent(val, 'Văn bản dán trực tiếp');
+                  }, 250);
                 }}
                 placeholder={"Đây là dữ liệu chi tháng 8\n01/08/2026 nhận tiền hoàn techcombank 100k\n02/08 ăn phở bò 40k\n03/08 - đổ xăng - 50k\n05 tiền điện nước 650k"}
                 className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs font-mono text-slate-800 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 leading-relaxed"
@@ -220,8 +233,8 @@ export default function ImportModal({ onImported, onClose }: Props) {
                 </div>
               </div>
 
-              <div className="border border-slate-200 dark:border-zinc-700 rounded-xl overflow-hidden max-h-56 overflow-y-auto">
-                <table className="w-full text-xs">
+              <div className="border border-slate-200 dark:border-zinc-700 rounded-xl overflow-hidden max-h-56 overflow-y-auto overflow-x-auto">
+                <table className="w-full text-xs min-w-[500px]">
                   <thead className="bg-slate-50 dark:bg-zinc-800 sticky top-0 border-b border-slate-100 dark:border-zinc-700">
                     <tr>
                       <th className="px-3 py-2 text-left w-6"></th>

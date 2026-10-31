@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { api, formatVND, getUserDisplayName, type SummaryStats, type CategoryStat, type DateStat, type FilterParams, type User, type CreditCardSummary } from '../lib/api';
 import {
@@ -49,7 +49,17 @@ interface SavingsTier {
   comment: string;
 }
 
-function getSavingsTier(rate: number, name = 'bạn'): SavingsTier {
+function getSavingsTier(rate: number, name = 'bạn', hasData = true): SavingsTier {
+  if (!hasData) {
+    return {
+      min: 0,
+      badge: '⚪ Chưa có dữ liệu',
+      badgeClass: 'bg-slate-100 text-slate-700 dark:bg-zinc-800 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700',
+      titleColor: 'text-slate-600 dark:text-zinc-400',
+      progressColor: 'text-slate-400',
+      comment: `Chưa phát sinh thu chi trong khoảng thời gian này. Hãy ghi lại các khoản giao dịch để bắt đầu theo dõi sức khỏe tài chính nhé!`
+    };
+  }
   if (rate >= 70) {
     return {
       min: 70,
@@ -250,7 +260,8 @@ export function getDashboardPeriodRange(key: DashboardQuickKey, specificMonth?: 
     return { dateFrom: today, dateTo: today };
   }
   if (key === 'month') {
-    return { dateFrom: `${y}-${pad(m + 1)}-01`, dateTo: today };
+    const lastDay = new Date(y, m + 1, 0).getDate();
+    return { dateFrom: `${y}-${pad(m + 1)}-01`, dateTo: `${y}-${pad(m + 1)}-${pad(lastDay)}` };
   }
   if (key === 'quarter') {
     const qStartMonth = Math.floor(m / 3) * 3 + 1; // 1, 4, 7, 10
@@ -284,18 +295,29 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
   const [loading, setLoading] = useState(true);
   const [showRuleTooltip, setShowRuleTooltip] = useState(false);
   const [creditSummary, setCreditSummary] = useState<CreditCardSummary | null>(null);
+  const [dashError, setDashError] = useState<string | null>(null);
 
-  const availableMonths = useRef(getAvailableMonths()).current;
+  const availableMonths = useMemo(() => getAvailableMonths(), []);
 
   useEffect(() => {
-    api.getCreditCards().then(res => setCreditSummary(res.summary)).catch(() => {});
+    let cancelled = false;
+    api.getCreditCards()
+      .then(res => {
+        if (!cancelled) setCreditSummary(res.summary);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, [refreshKey]);
 
   const activePeriodRange = getDashboardPeriodRange(quickPeriod, selectedMonth);
 
   useEffect(() => {
+    let cancelled = false;
     // Chỉ bật skeleton loading khi chưa có dữ liệu nào trong RAM
     if (!summary) setLoading(true);
+    setDashError(null);
 
     const activeFilters: FilterParams = {
       ...filters,
@@ -319,12 +341,40 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
       api.getSummary(activeFilters),
       api.getCategoryStats({ ...activeFilters, type: 'expense' }),
       api.getDateStats({ ...dateStatsFilters, group: chartGroup })
-    ]).then(([s, c, d]) => {
-      setSummary(s);
-      setCatStats(c.filter(cat => cat.type === 'expense'));
-      setDateStats(d);
-    }).finally(() => setLoading(false));
+    ])
+      .then(([s, c, d]) => {
+        if (cancelled) return;
+        setSummary(s);
+        setCatStats(c.filter(cat => cat.type === 'expense'));
+        setDateStats(d);
+      })
+      .catch((err: any) => {
+        if (cancelled) return;
+        console.error('Dashboard load error:', err);
+        setDashError(err?.message || 'Không thể tải số liệu báo cáo. Vui lòng thử lại.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [quickPeriod, selectedMonth, chartGroup, refreshKey]);
+
+  if (dashError && !summary) {
+    return (
+      <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 border border-slate-200 dark:border-zinc-800 text-center">
+        <p className="text-rose-600 dark:text-rose-400 font-semibold mb-3">{dashError}</p>
+        <button
+          onClick={() => setQuickPeriod(p => p)}
+          className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition cursor-pointer"
+        >
+          Thử lại
+        </button>
+      </div>
+    );
+  }
 
   if (loading && !summary) {
     return (
@@ -340,8 +390,13 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
   const pieTotal = expenseCategories.reduce((s, c) => s + c.total, 0);
   const userName = getUserDisplayName(user);
   const comparison = summary?.comparison;
-  const savingsRate = comparison?.savingsRate ?? (summary && summary.totalIncome > 0 ? Math.round(((summary.balance) / summary.totalIncome) * 1000) / 10 : 0);
-  const savingsTier = getSavingsTier(savingsRate, userName);
+  const hasData = Boolean(summary && ((summary.totalIncome || 0) > 0 || (summary.totalExpense || 0) > 0));
+  const savingsRate = comparison?.savingsRate ?? (
+    summary && summary.totalIncome > 0
+      ? Math.round(((summary.balance) / summary.totalIncome) * 1000) / 10
+      : (summary && summary.totalExpense > 0 ? -100 : 0)
+  );
+  const savingsTier = getSavingsTier(savingsRate, userName, hasData);
   const timePeriodLabel = getTimePeriodLabel(activePeriodRange);
 
   return (

@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 
 interface Props {
-  onSuccess: (user: User) => void;
+  onSuccess: (user: User, rememberMe?: boolean) => void;
 }
 
 type Mode = 'login' | 'register' | 'forgot';
@@ -59,12 +59,17 @@ export default function AuthModal({ onSuccess }: Props) {
       return;
     }
 
+    if (mode === 'register' && password.trim().length < 8) {
+      setError('Mật khẩu đăng ký phải có ít nhất 8 ký tự');
+      return;
+    }
+
     setLoading(true);
     try {
       if (mode === 'login') {
         const res = await api.login({ username: username.trim(), password: password.trim() });
         setStoredToken(res.token, rememberMe);
-        onSuccess(res.user);
+        onSuccess(res.user, rememberMe);
       } else if (mode === 'register') {
         const res = await api.register({
           username: username.trim(),
@@ -73,7 +78,7 @@ export default function AuthModal({ onSuccess }: Props) {
           email: email.trim() || undefined
         });
         setStoredToken(res.token, rememberMe);
-        onSuccess(res.user);
+        onSuccess(res.user, rememberMe);
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Đã xảy ra lỗi, vui lòng thử lại');
@@ -129,8 +134,8 @@ export default function AuthModal({ onSuccess }: Props) {
       return;
     }
 
-    if (!forgotNewPassword.trim() || forgotNewPassword.trim().length < 4) {
-      setError('Mật khẩu mới phải có ít nhất 4 ký tự');
+    if (!forgotNewPassword.trim() || forgotNewPassword.trim().length < 8) {
+      setError('Mật khẩu mới phải có ít nhất 8 ký tự');
       return;
     }
 
@@ -147,7 +152,7 @@ export default function AuthModal({ onSuccess }: Props) {
         newPassword: forgotNewPassword.trim()
       });
       setStoredToken(res.token, true);
-      onSuccess(res.user);
+      onSuccess(res.user, true);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Không thể đặt lại mật khẩu');
     } finally {
@@ -156,8 +161,8 @@ export default function AuthModal({ onSuccess }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-100 dark:border-zinc-800 transition-colors">
+    <div className="fixed inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm flex items-start sm:items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-100 dark:border-zinc-800 transition-colors max-h-[90dvh] flex flex-col my-auto">
         {/* Header với icon */}
         <div className="bg-gradient-to-br from-blue-600 via-indigo-600 to-indigo-700 p-6 text-white text-center relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-2xl pointer-events-none" />
@@ -228,7 +233,7 @@ export default function AuthModal({ onSuccess }: Props) {
 
         {/* ═══════════════ FORM ĐĂNG NHẬP & ĐĂNG KÝ ═══════════════ */}
         {mode !== 'forgot' && (
-          <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto">
             {mode === 'register' && (
               <>
                 <div>
@@ -371,7 +376,7 @@ export default function AuthModal({ onSuccess }: Props) {
 
         {/* ═══════════════ FORM QUÊN MẬT KHẨU ═══════════════ */}
         {mode === 'forgot' && (
-          <div className="p-6 space-y-4">
+          <div className="p-6 space-y-4 overflow-y-auto">
             {/* BƯỚC 1: Nhập Tên đăng nhập hoặc Gmail */}
             {forgotStep === 1 && (
               <form onSubmit={handleSendOtp} className="space-y-4">
@@ -432,8 +437,8 @@ export default function AuthModal({ onSuccess }: Props) {
                   </p>
                 </div>
 
-                {/* Banner hỗ trợ nếu chạy chế độ thử nghiệm (chưa có SMTP Pass) */}
-                {forgotSimulatedOtp && (
+                {/* Banner hỗ trợ nếu chạy chế độ thử nghiệm (chỉ hiện ở DEV mode) */}
+                {import.meta.env.DEV && forgotSimulatedOtp && (
                   <div className="bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-800 p-2.5 rounded-xl text-xs text-amber-900 dark:text-amber-200 flex items-center justify-between">
                     <div>
                       <span className="font-bold text-[11px] uppercase tracking-wider block">Mã thử nghiệm (Dev Mode):</span>

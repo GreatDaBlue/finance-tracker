@@ -85,7 +85,12 @@ export default function FilterBar({ filters, onFiltersChange }: Props) {
         f.search = query;
       }
 
-      onFiltersChange(f);
+      // Lỗi #39: Nếu truy vấn không chỉ định ngày, giữ nguyên khoảng ngày đang lọc
+      const mergedFilters: FilterParams = (!r.dateFrom && !r.dateTo)
+        ? { ...filters, ...f, dateFrom: filters.dateFrom, dateTo: filters.dateTo }
+        : f;
+
+      onFiltersChange(mergedFilters);
 
       const parts: string[] = [];
       if (r.type) parts.push(r.type === 'income' ? 'Thu nhập' : 'Chi tiêu');
@@ -103,8 +108,8 @@ export default function FilterBar({ filters, onFiltersChange }: Props) {
 
       setParseResult(parts.length ? `→ ${parts.join(' · ')}` : `→ Tìm "${query}"`);
     } catch {
-      // Nếu server lỗi parse, lọc tìm kiếm theo chuỗi text
-      onFiltersChange({ search: query });
+      // Nếu server lỗi parse, lọc tìm kiếm theo chuỗi text nhưng vẫn giữ khoảng ngày đang lọc
+      onFiltersChange({ ...filters, search: query });
       setParseResult(`→ Tìm "${query}"`);
     } finally {
       setIsParsing(false);

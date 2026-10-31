@@ -40,8 +40,16 @@ export async function sendPasswordResetOtp(
 ): Promise<SendOtpResult> {
   const transporter = getTransporter();
 
-  // Nếu chưa cấu hình SMTP trong .env (chế độ phát triển / thử nghiệm)
+  // Nếu chưa cấu hình SMTP trong .env
   if (!transporter) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('❌ [Mailer Error]: SMTP_USER hoặc SMTP_PASS chưa được cấu hình trong môi trường Production!');
+      return {
+        success: false,
+        error: 'Chức năng gửi email chưa được thiết lập trên máy chủ. Vui lòng liên hệ quản trị viên.'
+      };
+    }
+
     console.log('\n================================================================');
     console.log('📧 [THÔNG BÁO MAILER - CHẾ ĐỘ THỬ NGHIỆM]');
     console.log(`Chưa thiết lập SMTP_USER / SMTP_PASS trong file .env.`);

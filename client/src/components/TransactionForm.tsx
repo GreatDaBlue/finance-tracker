@@ -46,10 +46,21 @@ export default function TransactionForm({ onCreated, user }: Props) {
 
   const previewTimer = useRef<ReturnType<typeof setTimeout>>();
   const recognitionRef = useRef<any>(null);
+  const submittingRef = useRef(false);
+  const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const classifyReqId = useRef(0);
 
-  // Dừng nhận diện giọng nói khi component unmount
+  function triggerSuccess(msg: string) {
+    if (successTimerRef.current) clearTimeout(successTimerRef.current);
+    setSuccess(msg);
+    successTimerRef.current = setTimeout(() => setSuccess(''), 3500);
+  }
+
+  // Dọn timer & dừng nhận diện giọng nói khi component unmount
   useEffect(() => {
     return () => {
+      if (successTimerRef.current) clearTimeout(successTimerRef.current);
+      if (previewTimer.current) clearTimeout(previewTimer.current);
       if (recognitionRef.current) {
         try {
           recognitionRef.current.abort();
@@ -164,8 +175,9 @@ export default function TransactionForm({ onCreated, user }: Props) {
       if (item.date) setDate(item.date);
       setDescription(item.description);
 
-      // Gọi server classifyPreview với mô tả của item
+      // Gọi server classifyPreview với mô tả của item (có chống race Lỗi #45)
       clearTimeout(previewTimer.current);
+      const reqId1 = ++classifyReqId.current;
       previewTimer.current = setTimeout(async () => {
         const activeType = userOverrodeType
           ? (type === 'income' ? 'income' : 'expense')
@@ -175,6 +187,7 @@ export default function TransactionForm({ onCreated, user }: Props) {
 
         try {
           const p = await api.classifyPreview(descForServer, activeType);
+          if (reqId1 !== classifyReqId.current) return;
           if (p?.category && (!category || category === 'Sổ nợ')) {
             setCategory(p.category);
           }
@@ -210,6 +223,7 @@ export default function TransactionForm({ onCreated, user }: Props) {
 
       // Gọi server classifyPreview
       clearTimeout(previewTimer.current);
+      const reqId2 = ++classifyReqId.current;
       previewTimer.current = setTimeout(async () => {
         const activeType = userOverrodeType
           ? (type === 'income' ? 'income' : 'expense')
@@ -219,11 +233,13 @@ export default function TransactionForm({ onCreated, user }: Props) {
 
         try {
           const p = await api.classifyPreview(descForServer, activeType);
+          if (reqId2 !== classifyReqId.current) return;
           setPreview(p);
           if (p.suggestedDate) setDate(p.suggestedDate);
           setCategory(p.category || guessed.category);
           setDescription(cleanDescriptionText(p.cleanDescription || parsed.description));
         } catch {
+          if (reqId2 !== classifyReqId.current) return;
           setPreview({
             category: guessed.category,
             suggestedDate: clientDate.date,
@@ -303,6 +319,8 @@ export default function TransactionForm({ onCreated, user }: Props) {
   // ── Submit form ───────────────────────────────────────────────────────────
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setError('');
 
     // Trường hợp 1: Nhập nhiều giao dịch cùng lúc (parsedItems.length > 1)
@@ -330,10 +348,12 @@ export default function TransactionForm({ onCreated, user }: Props) {
           if (res.data && res.data.length > 0) {
             onCreated(res.data[0]);
           }
+          // Lỗi #8: Gỡ các giao dịch thường đã lưu thành công khỏi parsedItems ngay lập tức
+          setParsedItems(prev => prev.filter(i => i.isDebt));
         }
 
         if (debtItems.length > 0) {
-          await Promise.all(
+          const debtResults = await Promise.allSettled(
             debtItems.map(d =>
               api.createDebt({
                 type: d.debtType || (d.type === 'debt_borrow' ? 'borrow' : 'lend'),
@@ -345,14 +365,30 @@ export default function TransactionForm({ onCreated, user }: Props) {
               })
             )
           );
-          createdDebtCount = debtItems.length;
+
+          const failedDebts: ParsedTransactionItem[] = [];
+          debtResults.forEach((r, idx) => {
+            if (r.status === 'fulfilled') {
+              createdDebtCount++;
+            } else {
+              failedDebts.push(debtItems[idx]);
+            }
+          });
+
+          if (failedDebts.length > 0) {
+            setParsedItems(failedDebts);
+            setError(`Đã lưu ${createdTxCount + createdDebtCount} mục. Còn ${failedDebts.length} khoản nợ bị lỗi, vui lòng bấm Lưu lại.`);
+            return;
+          } else {
+            setParsedItems([]);
+          }
           onCreated({} as Transaction);
         }
 
         const msgParts: string[] = [];
         if (createdTxCount > 0) msgParts.push(`${createdTxCount} giao dịch`);
         if (createdDebtCount > 0) msgParts.push(`${createdDebtCount} khoản vào Sổ nợ`);
-        setSuccess(`✅ Đã lưu thành công: ${msgParts.join(' và ')}!`);
+        triggerSuccess(`✅ Đã lưu thành công: ${msgParts.join(' và ')}!`);
 
         // Reset
         setSmartText('');
@@ -365,10 +401,10 @@ export default function TransactionForm({ onCreated, user }: Props) {
         setPreview(null);
         setDate(todayISO());
         setUserOverrodeType(false);
-        setTimeout(() => setSuccess(''), 4000);
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : 'Có lỗi khi lưu các giao dịch');
       } finally {
+        submittingRef.current = false;
         setIsSubmitting(false);
       }
       return;
@@ -418,6 +454,7 @@ export default function TransactionForm({ onCreated, user }: Props) {
       const debtDesc = finalDesc || (debtType === 'lend' ? `Cho ${debtPerson} vay` : `Vay ${debtPerson}`);
 
       if (!debtAmount || debtAmount <= 0) {
+        submittingRef.current = false;
         setError('Vui lòng nhập số tiền cho khoản nợ (ví dụ: 500k, 2tr, 1 củ)');
         return;
       }
@@ -434,7 +471,7 @@ export default function TransactionForm({ onCreated, user }: Props) {
         });
 
         onCreated({} as Transaction);
-        setSuccess(`✅ Đã lưu vào Sổ nợ: ${debtType === 'lend' ? `Cho ${debtPerson} vay` : `Vay ${debtPerson}`} — ${formatVND(debtAmount)} (Không tính vào thu chi)!`);
+        triggerSuccess(`✅ Đã lưu vào Sổ nợ: ${debtType === 'lend' ? `Cho ${debtPerson} vay` : `Vay ${debtPerson}`} — ${formatVND(debtAmount)} (Không tính vào thu chi)!`);
 
         // Reset form
         setSmartText('');
@@ -447,10 +484,10 @@ export default function TransactionForm({ onCreated, user }: Props) {
         setPreview(null);
         setDate(todayISO());
         setUserOverrodeType(false);
-        setTimeout(() => setSuccess(''), 3500);
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : 'Có lỗi xảy ra khi lưu khoản nợ');
       } finally {
+        submittingRef.current = false;
         setIsSubmitting(false);
       }
       return;
@@ -458,10 +495,12 @@ export default function TransactionForm({ onCreated, user }: Props) {
 
     // Giao dịch thông thường (Chi tiêu hoặc Thu nhập)
     if (!finalAmount || finalAmount <= 0) {
+      submittingRef.current = false;
       setError('Vui lòng nhập số tiền trong câu (ví dụ: ăn trưa 35k, 2tr) hoặc điền ở Tùy chỉnh chi tiết.');
       return;
     }
     if (!finalDesc) {
+      submittingRef.current = false;
       setError('Vui lòng nhập mô tả giao dịch');
       return;
     }
@@ -490,12 +529,12 @@ export default function TransactionForm({ onCreated, user }: Props) {
             note: finalNote,
             day_of_month: dom
           });
-          setSuccess(`✅ Đã lưu ${t.type === 'expense' ? 'chi tiêu' : 'thu nhập'} và kích hoạt tự động lặp lại vào ngày ${dom} hàng tháng!`);
+          triggerSuccess(`✅ Đã lưu ${t.type === 'expense' ? 'chi tiêu' : 'thu nhập'} và kích hoạt tự động lặp lại vào ngày ${dom} hàng tháng!`);
         } catch {
-          setSuccess(`✅ Đã lưu ${t.type === 'expense' ? 'chi tiêu' : 'thu nhập'}: ${t.description} — ${formatVND(t.amount)}`);
+          triggerSuccess(`✅ Đã lưu ${t.type === 'expense' ? 'chi tiêu' : 'thu nhập'}: ${t.description} — ${formatVND(t.amount)}`);
         }
       } else {
-        setSuccess(`✅ Đã lưu ${t.type === 'expense' ? 'chi tiêu' : 'thu nhập'}: ${t.description} — ${formatVND(t.amount)}`);
+        triggerSuccess(`✅ Đã lưu ${t.type === 'expense' ? 'chi tiêu' : 'thu nhập'}: ${t.description} — ${formatVND(t.amount)}`);
       }
 
       // Reset form
@@ -510,10 +549,10 @@ export default function TransactionForm({ onCreated, user }: Props) {
       setPreview(null);
       setDate(todayISO());
       setUserOverrodeType(false);
-      setTimeout(() => setSuccess(''), 3500);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Có lỗi xảy ra khi lưu giao dịch');
     } finally {
+      submittingRef.current = false;
       setIsSubmitting(false);
     }
   }

@@ -4,6 +4,9 @@ import { requireAuth, AuthenticatedRequest } from '../lib/auth';
 
 const router = Router();
 
+const MAX_AMOUNT = 1_000_000_000_000;
+const MONTH_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
+
 export interface BudgetRow {
   id: number;
   user_id: number;
@@ -18,7 +21,10 @@ router.get('/', requireAuth, async (req: AuthenticatedRequest, res: Response) =>
   const userId = req.user!.id;
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const month = (req.query.month as string) || currentMonth;
+  let month = (req.query.month as string) || currentMonth;
+  if (!MONTH_REGEX.test(month)) {
+    month = currentMonth;
+  }
 
   // Lấy danh sách ngân sách của user trong tháng này
   const budgetRows = await db.prepare(
@@ -57,9 +63,13 @@ router.get('/', requireAuth, async (req: AuthenticatedRequest, res: Response) =>
     let status: 'GOOD' | 'WARNING' | 'EXCEEDED' = 'GOOD';
     let message = '✅ Đang chi tiêu đúng tiến độ';
 
-    if (spent >= budgetAmount) {
+    if (spent > budgetAmount) {
       status = 'EXCEEDED';
-      message = `🚨 Đã tiêu vượt 100% ngân sách: Đã tiêu ${spent.toLocaleString('vi-VN')}₫ / ${budgetAmount.toLocaleString('vi-VN')}₫!`;
+      message = `🚨 Đã tiêu vượt ngân sách: Đã tiêu ${spent.toLocaleString('vi-VN')}₫ / ${budgetAmount.toLocaleString('vi-VN')}₫ (${Math.round(actualRatio * 100)}%)!`;
+      hasOverpacedAlert = true;
+    } else if (spent === budgetAmount && budgetAmount > 0) {
+      status = 'WARNING';
+      message = `⚠️ Đã chạm mức tối đa 100% ngân sách: Đã tiêu ${spent.toLocaleString('vi-VN')}₫ / ${budgetAmount.toLocaleString('vi-VN')}₫!`;
       hasOverpacedAlert = true;
     } else if (isCurrentMonth && spent > expectedSpendToDate) {
       status = 'WARNING';
@@ -97,8 +107,13 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res: Response) =
   const userId = req.user!.id;
   const { month, category, amount } = req.body as { month: string; category?: string; amount: number };
 
-  if (!month || typeof amount !== 'number' || amount <= 0) {
-    return res.status(400).json({ error: 'Vui lòng cung cấp tháng hợp lệ và số tiền ngân sách lớn hơn 0' });
+  if (!month || !MONTH_REGEX.test(month)) {
+    return res.status(400).json({ error: 'Định dạng tháng không hợp lệ (yêu cầu dạng YYYY-MM)' });
+  }
+
+  const numAmount = Number(amount);
+  if (!Number.isFinite(numAmount) || numAmount <= 0 || numAmount > MAX_AMOUNT) {
+    return res.status(400).json({ error: `Số tiền ngân sách phải từ 1 đến ${MAX_AMOUNT.toLocaleString('vi-VN')} ₫` });
   }
 
   const cat = (category || '').trim();
@@ -108,11 +123,11 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res: Response) =
   ).get<{ id: number }>(userId, month, cat);
 
   if (existing) {
-    await db.prepare('UPDATE budgets SET amount = ? WHERE id = ?').run(amount, existing.id);
+    await db.prepare('UPDATE budgets SET amount = ? WHERE id = ?').run(numAmount, existing.id);
   } else {
     await db.prepare(
       'INSERT INTO budgets (user_id, month, category, amount) VALUES (?, ?, ?, ?)'
-    ).run(userId, month, cat, amount);
+    ).run(userId, month, cat, numAmount);
   }
 
   res.status(201).json({ success: true });

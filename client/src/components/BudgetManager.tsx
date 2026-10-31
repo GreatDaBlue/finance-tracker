@@ -24,21 +24,41 @@ export default function BudgetManager({ refreshKey, onOpenRecurring, user }: Pro
   const [amountStr, setAmountStr] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deletingBudgetId, setDeletingBudgetId] = useState<number | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   async function loadBudgets() {
     setLoading(true);
+    setLoadError(null);
     try {
       const res = await api.getBudgets(selectedMonth);
       setData(res);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(err);
+      setLoadError(err instanceof Error ? err.message : 'Không tải được ngân sách');
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    loadBudgets();
+    let cancelled = false;
+    setLoading(true);
+    setLoadError(null);
+    api.getBudgets(selectedMonth)
+      .then(res => {
+        if (!cancelled) setData(res);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Không tải được ngân sách');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [selectedMonth, refreshKey]);
 
   useEffect(() => {
@@ -80,12 +100,18 @@ export default function BudgetManager({ refreshKey, onOpenRecurring, user }: Pro
   }
 
   async function handleDeleteBudget(id: number) {
+    if (deletingBudgetId !== null) return;
     if (!confirm(`${userName} có chắc chắn muốn xóa ngân sách này?`)) return;
+
+    setDeletingBudgetId(id);
     try {
       await api.deleteBudget(id);
       await loadBudgets();
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(err);
+      alert(err instanceof Error ? err.message : 'Không thể xóa ngân sách');
+    } finally {
+      setDeletingBudgetId(null);
     }
   }
 
@@ -191,6 +217,17 @@ export default function BudgetManager({ refreshKey, onOpenRecurring, user }: Pro
       {/* Danh sách các ngân sách đã đặt */}
       {loading ? (
         <p className="text-center text-xs text-slate-400 dark:text-zinc-500 py-6">Đang tải dữ liệu ngân sách...</p>
+      ) : loadError ? (
+        <div className="text-center py-6 px-4 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 rounded-2xl space-y-2">
+          <p className="text-xs text-rose-600 dark:text-rose-400 font-semibold">{loadError}</p>
+          <button
+            type="button"
+            onClick={loadBudgets}
+            className="text-xs font-semibold px-3 py-1.5 bg-rose-600 text-white rounded-xl hover:bg-rose-700 transition-colors"
+          >
+            Thử lại
+          </button>
+        </div>
       ) : !data?.budgets || data.budgets.length === 0 ? (
         <div className="text-center py-7 px-4 border border-dashed border-slate-200 dark:border-zinc-700 rounded-2xl space-y-3 bg-slate-50/40 dark:bg-zinc-900/30">
           <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto shadow-xs">
@@ -257,8 +294,9 @@ export default function BudgetManager({ refreshKey, onOpenRecurring, user }: Pro
 
                     <button
                       type="button"
+                      disabled={deletingBudgetId !== null}
                       onClick={() => handleDeleteBudget(b.id)}
-                      className="p-2 sm:p-1 text-slate-400 dark:text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-xl hover:bg-white dark:hover:bg-zinc-800 active:scale-90 transition-all cursor-pointer"
+                      className="p-2 sm:p-1 text-slate-400 dark:text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-xl hover:bg-white dark:hover:bg-zinc-800 active:scale-90 transition-all cursor-pointer disabled:opacity-50"
                       title="Xóa ngân sách này"
                       aria-label="Xóa ngân sách này"
                     >
@@ -324,7 +362,7 @@ export default function BudgetManager({ refreshKey, onOpenRecurring, user }: Pro
           onClick={() => setShowAddModal(false)}
         >
           <div
-            className="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl border border-slate-100 dark:border-zinc-800 w-full max-w-md p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150 cursor-default"
+            className="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl border border-slate-100 dark:border-zinc-800 w-full max-w-md max-h-[90dvh] overflow-y-auto p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150 cursor-default"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">

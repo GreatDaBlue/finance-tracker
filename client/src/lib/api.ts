@@ -250,7 +250,16 @@ export function getUserDisplayName(user?: User | null): string {
   return 'bạn';
 }
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
+export class ApiError extends Error {
+  status?: number;
+  constructor(message: string, status?: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
+async function request<T>(path: string, options?: RequestInit, timeoutMs = 20000): Promise<T> {
   const token = getStoredToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -261,10 +270,27 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${BASE}${path}`, {
-    ...options,
-    headers
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      ...options,
+      headers,
+      signal: options?.signal || controller.signal
+    });
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new ApiError('Yêu cầu hết thời gian chờ (timeout sau 20 giây). Vui lòng thử lại sau!', 408);
+    }
+    if (err instanceof TypeError || (err instanceof Error && err.message.toLowerCase().includes('fetch'))) {
+      throw new ApiError('Không thể kết nối đến máy chủ. Vui lòng kiểm tra lại đường truyền mạng hoặc thử lại sau!', 0);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (res.status === 401 && !path.startsWith('/auth/login') && !path.startsWith('/auth/register')) {
     setStoredToken(null);
@@ -273,7 +299,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((err as { error: string }).error || res.statusText);
+    throw new ApiError((err as { error: string }).error || res.statusText || 'Yêu cầu không thành công', res.status);
   }
   return res.json() as Promise<T>;
 }
@@ -505,6 +531,13 @@ export const api = {
     return request<Debt>(`/debts/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data)
+    });
+  },
+
+  repayDebt(id: number, amount: number): Promise<{ debt: Debt; message: string }> {
+    return request<{ debt: Debt; message: string }>(`/debts/${id}/repay`, {
+      method: 'POST',
+      body: JSON.stringify({ amount })
     });
   },
 

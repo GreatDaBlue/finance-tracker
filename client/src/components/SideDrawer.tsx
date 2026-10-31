@@ -217,8 +217,8 @@ export default function SideDrawer({
     setPwError('');
     setPwSuccess('');
 
-    if (newPassword.length < 4) {
-      setPwError('Mật khẩu mới phải có ít nhất 4 ký tự');
+    if (newPassword.length < 8) {
+      setPwError('Mật khẩu mới phải có ít nhất 8 ký tự');
       return;
     }
     if (newPassword !== confirmPassword) {

@@ -14,6 +14,8 @@ export default function RecurringModal({ onClose, onChanged, user }: Props) {
   const [list, setList] = useState<RecurringTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
+  const [actionId, setActionId] = useState<number | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Form thêm mới
   const [type, setType] = useState<'expense' | 'income'>('expense');
@@ -27,18 +29,36 @@ export default function RecurringModal({ onClose, onChanged, user }: Props) {
 
   async function loadRecurring() {
     setLoading(true);
+    setLoadError(null);
     try {
       const res = await api.getRecurring();
       setList(res.data);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(err);
+      setLoadError(err instanceof Error ? err.message : 'Không tải được danh sách lặp lại');
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    loadRecurring();
+    let cancelled = false;
+    setLoading(true);
+    setLoadError(null);
+    api.getRecurring()
+      .then(res => {
+        if (!cancelled) setList(res.data);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Không tải được danh sách lặp lại');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -50,23 +70,33 @@ export default function RecurringModal({ onClose, onChanged, user }: Props) {
   }, [onClose]);
 
   async function handleToggleActive(item: RecurringTransaction) {
+    if (actionId !== null) return;
+    setActionId(item.id);
     try {
       await api.updateRecurring(item.id, { is_active: item.is_active ? 0 : 1 });
       await loadRecurring();
       onChanged?.();
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(err);
+      alert(err instanceof Error ? err.message : 'Không thể cập nhật trạng thái');
+    } finally {
+      setActionId(null);
     }
   }
 
   async function handleDelete(id: number) {
+    if (actionId !== null) return;
     if (!window.confirm(`${userName} có chắc muốn xóa khoản chi tiêu lặp lại này không?`)) return;
+    setActionId(id);
     try {
       await api.deleteRecurring(id);
       await loadRecurring();
       onChanged?.();
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(err);
+      alert(err instanceof Error ? err.message : 'Không thể xóa khoản chi tiêu lặp lại');
+    } finally {
+      setActionId(null);
     }
   }
 
@@ -113,7 +143,7 @@ export default function RecurringModal({ onClose, onChanged, user }: Props) {
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-slate-100 dark:border-zinc-800 w-full max-w-lg p-5 sm:p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150 cursor-default"
+        className="bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-slate-100 dark:border-zinc-800 w-full max-w-lg max-h-[90dvh] overflow-y-auto p-5 sm:p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150 cursor-default"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
@@ -225,6 +255,17 @@ export default function RecurringModal({ onClose, onChanged, user }: Props) {
         <div className="space-y-2 max-h-72 overflow-y-auto pr-0.5">
           {loading ? (
             <p className="text-center text-xs text-slate-400 py-6">Đang tải...</p>
+          ) : loadError ? (
+            <div className="text-center py-6 px-4 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 rounded-2xl space-y-2">
+              <p className="text-xs text-rose-600 dark:text-rose-400 font-semibold">{loadError}</p>
+              <button
+                type="button"
+                onClick={loadRecurring}
+                className="text-xs font-semibold px-3 py-1.5 bg-rose-600 text-white rounded-xl hover:bg-rose-700 transition-colors"
+              >
+                Thử lại
+              </button>
+            </div>
           ) : list.length === 0 ? (
             <div className="text-center py-8 border border-dashed border-slate-200 dark:border-zinc-800 rounded-2xl space-y-1.5">
               <Clock className="w-8 h-8 text-slate-300 dark:text-zinc-600 mx-auto" />
@@ -264,21 +305,23 @@ export default function RecurringModal({ onClose, onChanged, user }: Props) {
 
                   <button
                     type="button"
+                    disabled={actionId !== null}
                     onClick={() => handleToggleActive(item)}
-                    className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-colors ${
+                    className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-colors disabled:opacity-50 ${
                       item.is_active
                         ? 'bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
                         : 'bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400'
                     }`}
                     title="Bật / Tắt tự động tạo"
                   >
-                    {item.is_active ? 'Đang bật' : 'Tạm dừng'}
+                    {actionId === item.id ? '...' : item.is_active ? 'Đang bật' : 'Tạm dừng'}
                   </button>
 
                   <button
                     type="button"
+                    disabled={actionId !== null}
                     onClick={() => handleDelete(item.id)}
-                    className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-700 transition-colors"
+                    className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-700 transition-colors disabled:opacity-50"
                     title="Xóa khoản lặp lại này"
                   >
                     <Trash2 className="w-3.5 h-3.5" />

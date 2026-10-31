@@ -37,6 +37,14 @@ const CATEGORY_ICONS: Record<string, string> = {
   'Khác': '❓',
 };
 
+function formatCompactVND(amount: number): string {
+  if (amount >= 1_000_000_000) {
+    const billions = Math.round((amount / 1_000_000_000) * 10) / 10;
+    return `${billions.toLocaleString('vi-VN')} tỷ ₫`;
+  }
+  return formatVND(amount);
+}
+
 function EditModal({ t, onClose, onSaved }: { t: Transaction; onClose: () => void; onSaved: (t: Transaction) => void }) {
   const [desc, setDesc] = useState(t.description);
   const [amount, setAmount] = useState(String(t.amount));
@@ -44,19 +52,37 @@ function EditModal({ t, onClose, onSaved }: { t: Transaction; onClose: () => voi
   const [category, setCategory] = useState(t.category);
   const [note, setNote] = useState(t.note);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   async function save() {
+    const num = parseFloat(amount);
+    if (isNaN(num) || num <= 0 || num > 1_000_000_000_000) {
+      setError('Số tiền phải là số hợp lệ từ 1 đến 1.000 tỷ ₫');
+      return;
+    }
+    if (!desc.trim()) {
+      setError('Mô tả giao dịch không được để trống');
+      return;
+    }
+    if (!date) {
+      setError('Vui lòng chọn ngày hợp lệ');
+      return;
+    }
+
     setSaving(true);
+    setError('');
     try {
       const updated = await api.updateTransaction(t.id, {
-        description: desc,
-        amount: parseFloat(amount),
+        description: desc.trim(),
+        amount: num,
         date,
         category,
-        note
+        note: note.trim()
       });
       onSaved(updated);
       onClose();
+    } catch (err: any) {
+      setError(err?.message || 'Không thể lưu thay đổi. Vui lòng thử lại.');
     } finally {
       setSaving(false);
     }
@@ -72,22 +98,29 @@ function EditModal({ t, onClose, onSaved }: { t: Transaction; onClose: () => voi
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 dark:bg-black/75 flex items-center justify-center z-50 p-4 cursor-pointer"
+      className="fixed inset-0 bg-black/60 dark:bg-black/75 flex items-center justify-center z-50 p-4 cursor-pointer overflow-y-auto"
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-slate-100 dark:border-zinc-800 w-full max-w-md p-5 space-y-4 cursor-default"
+        className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-slate-100 dark:border-zinc-800 w-full max-w-md p-5 space-y-4 cursor-default max-h-[90dvh] overflow-y-auto my-auto"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
           <h3 className="font-semibold text-slate-800 dark:text-zinc-100">Chỉnh sửa giao dịch</h3>
           <button onClick={onClose} className="p-1 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300"><X className="w-5 h-5" /></button>
         </div>
+
+        {error && (
+          <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-xs text-rose-700 dark:text-rose-300 font-medium">
+            {error}
+          </div>
+        )}
+
         <div className="space-y-3">
           <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400">Mô tả</label>
           <input value={desc} onChange={e => setDesc(e.target.value)} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-slate-800 dark:text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400">Số tiền</label>
-          <input type="number" value={amount} onChange={e => setAmount(e.target.value)} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-slate-800 dark:text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400">Số tiền (₫)</label>
+          <input type="number" min="1" step="any" value={amount} onChange={e => setAmount(e.target.value)} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-slate-800 dark:text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400">Ngày</label>
           <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-slate-800 dark:text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:light] dark:[color-scheme:dark]" />
           <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400">Danh mục</label>
@@ -98,9 +131,9 @@ function EditModal({ t, onClose, onSaved }: { t: Transaction; onClose: () => voi
           <input value={note} onChange={e => setNote(e.target.value)} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-slate-800 dark:text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
         <div className="flex gap-2 pt-2">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-sm text-slate-600 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors">Hủy</button>
-          <button onClick={save} disabled={saving} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 shadow-xs">
-            {saving ? 'Lưu...' : 'Lưu'}
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-sm text-slate-600 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors cursor-pointer">Hủy</button>
+          <button onClick={save} disabled={saving} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 shadow-xs cursor-pointer">
+            {saving ? 'Đang lưu...' : 'Lưu thay đổi'}
           </button>
         </div>
       </div>
@@ -122,7 +155,7 @@ export default function TransactionList({
 }: Props) {
   const userName = getUserDisplayName(user);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deletingIds, setDeletingIds] = useState<Set<number>>(new Set());
   const [isExporting, setIsExporting] = useState(false);
 
   // Chế độ chọn nhiều
@@ -178,13 +211,26 @@ export default function TransactionList({
   const dates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
 
   async function handleDelete(id: number) {
-    setDeletingId(id);
+    if (!window.confirm('Bạn có chắc chắn muốn xóa giao dịch này không?')) {
+      return;
+    }
+    setDeletingIds(prev => new Set(prev).add(id));
     try {
       await api.deleteTransaction(id);
       onDeleted(id);
       setSelectedIds(prev => prev.filter(item => item !== id));
+    } catch (err: any) {
+      if (err?.status === 404) {
+        onDeleted(id);
+      } else {
+        alert(err?.message || 'Không thể xóa giao dịch. Vui lòng thử lại.');
+      }
     } finally {
-      setDeletingId(null);
+      setDeletingIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
   }
 
@@ -459,8 +505,11 @@ export default function TransactionList({
 
                       {/* Amount */}
                       <div className="text-right flex-shrink-0">
-                        <p className={`text-sm sm:text-base font-bold tracking-tight tabular-nums ${t.type === 'income' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
-                          {t.type === 'income' ? '+' : '-'}{formatVND(t.amount)}
+                        <p
+                          title={formatVND(t.amount)}
+                          className={`text-sm sm:text-base font-bold tracking-tight tabular-nums ${t.type === 'income' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}
+                        >
+                          {t.type === 'income' ? '+' : '-'}{formatCompactVND(t.amount)}
                         </p>
                       </div>
 
@@ -479,7 +528,7 @@ export default function TransactionList({
                           <button
                             type="button"
                             onClick={() => handleDelete(t.id)}
-                            disabled={deletingId === t.id}
+                            disabled={deletingIds.has(t.id)}
                             className="p-2 sm:p-1.5 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/70 text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 active:scale-90 transition-all cursor-pointer disabled:opacity-50"
                             title="Xóa giao dịch"
                             aria-label="Xóa giao dịch"
@@ -502,20 +551,24 @@ export default function TransactionList({
         <button
           onClick={onLoadMore}
           disabled={loading}
-          className="w-full py-3 rounded-2xl border-2 border-dashed border-slate-200 dark:border-zinc-700 text-slate-500 dark:text-zinc-400 text-sm hover:border-blue-400 dark:hover:border-blue-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
+          className="w-full py-3 rounded-2xl border-2 border-dashed border-slate-200 dark:border-zinc-700 text-slate-500 dark:text-zinc-400 text-sm hover:border-blue-400 dark:hover:border-blue-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors cursor-pointer"
         >
           {loading ? 'Đang tải...' : `Xem thêm (còn ${total - transactions.length} giao dịch)`}
         </button>
       )}
 
       {/* Modal Chỉnh sửa */}
-      {editingId !== null && (
-        <EditModal
-          t={transactions.find(t => t.id === editingId)!}
-          onClose={() => setEditingId(null)}
-          onSaved={t => { onUpdated(t); setEditingId(null); }}
-        />
-      )}
+      {editingId !== null && (() => {
+        const editingTx = transactions.find(t => t.id === editingId);
+        if (!editingTx) return null;
+        return (
+          <EditModal
+            t={editingTx}
+            onClose={() => setEditingId(null)}
+            onSaved={t => { onUpdated(t); setEditingId(null); }}
+          />
+        );
+      })()}
 
       {/* Modal xác nhận Xóa sạch tất cả giao dịch */}
       {showConfirmDeleteAll && (
