@@ -125,6 +125,24 @@ export default function HomePage() {
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
   }, []);
 
+  // Kích hoạt cài đặt 1-chạm nếu trình duyệt hỗ trợ, nếu không mới mở hướng dẫn
+  const handleTriggerInstall = async () => {
+    if (deferredPrompt) {
+      try {
+        deferredPrompt.prompt();
+        const choice = await deferredPrompt.userChoice;
+        if (choice && choice.outcome === 'accepted') {
+          setDeferredPrompt(null);
+          return;
+        }
+      } catch (err) {
+        console.error('Trigger install error:', err);
+      }
+    }
+    // Với iOS Safari hoặc trình duyệt chưa hỗ trợ beforeinstallprompt, mở bảng hướng dẫn
+    setShowInstallGuide(true);
+  };
+
   // Chế độ Tối (Dark Mode)
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return (localStorage.getItem('theme') as 'light' | 'dark') || 'light';
@@ -301,6 +319,7 @@ export default function HomePage() {
       <InstallSmartBanner
         onOpenGuide={() => setShowInstallGuide(true)}
         deferredPrompt={deferredPrompt}
+        onInstallSuccess={() => setDeferredPrompt(null)}
       />
 
       {/* Header */}
@@ -530,7 +549,7 @@ export default function HomePage() {
         }}
         onOpenInstallGuide={() => {
           setIsDrawerOpen(false);
-          setShowInstallGuide(true);
+          handleTriggerInstall();
         }}
       />
 

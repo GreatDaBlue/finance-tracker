@@ -4,10 +4,12 @@ import { Smartphone, X, Download, Sparkles } from 'lucide-react';
 interface Props {
   onOpenGuide: () => void;
   deferredPrompt?: any;
+  onInstallSuccess?: () => void;
 }
 
-export default function InstallSmartBanner({ onOpenGuide, deferredPrompt }: Props) {
+export default function InstallSmartBanner({ onOpenGuide, deferredPrompt, onInstallSuccess }: Props) {
   const [isVisible, setIsVisible] = useState(false);
+  const [isInstalling, setIsInstalling] = useState(false);
 
   useEffect(() => {
     // 1. Nếu đang chạy ở chế độ App độc lập (Standalone PWA) thì không bao giờ hiện banner
@@ -30,10 +32,10 @@ export default function InstallSmartBanner({ onOpenGuide, deferredPrompt }: Prop
       }
     } catch {}
 
-    // Hiển thị banner với delay nhẹ 1 giây để không làm giật giao diện khi trang vừa tải
+    // Hiển thị banner với delay nhẹ để không làm giật giao diện khi trang vừa tải
     const timer = setTimeout(() => {
       setIsVisible(true);
-    }, 800);
+    }, 600);
 
     return () => clearTimeout(timer);
   }, []);
@@ -43,6 +45,32 @@ export default function InstallSmartBanner({ onOpenGuide, deferredPrompt }: Prop
     try {
       localStorage.setItem('pwa_banner_dismissed_at', Date.now().toString());
     } catch {}
+  };
+
+  // Cài đặt 1-chạm trực tiếp:
+  const handleDirectInstall = async () => {
+    if (deferredPrompt) {
+      try {
+        setIsInstalling(true);
+        deferredPrompt.prompt();
+        const choiceResult = await deferredPrompt.userChoice;
+        if (choiceResult && choiceResult.outcome === 'accepted') {
+          setIsVisible(false);
+          if (onInstallSuccess) onInstallSuccess();
+          try {
+            localStorage.setItem('pwa_installed', 'true');
+          } catch {}
+        }
+      } catch (err) {
+        console.error('Direct install error:', err);
+        onOpenGuide();
+      } finally {
+        setIsInstalling(false);
+      }
+    } else {
+      // Nếu là iOS hoặc trình duyệt chưa nổ prompt, mở hướng dẫn
+      onOpenGuide();
+    }
   };
 
   if (!isVisible) return null;
@@ -79,11 +107,12 @@ export default function InstallSmartBanner({ onOpenGuide, deferredPrompt }: Prop
         <div className="flex items-center gap-1.5 shrink-0">
           <button
             type="button"
-            onClick={onOpenGuide}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-blue-700 hover:bg-blue-50 active:scale-95 font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer whitespace-nowrap"
+            onClick={handleDirectInstall}
+            disabled={isInstalling}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white text-blue-700 hover:bg-blue-50 active:scale-95 font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer whitespace-nowrap disabled:opacity-50"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>{deferredPrompt ? 'Cài ngay' : 'Xem cách cài'}</span>
+            <span>{isInstalling ? 'Đang cài...' : deferredPrompt ? 'Cài đặt ngay' : 'Cài đặt App'}</span>
           </button>
 
           <button
