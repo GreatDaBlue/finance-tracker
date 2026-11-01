@@ -91,10 +91,10 @@ export default function InstallSmartBanner({ onOpenGuide, deferredPrompt, onInst
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="font-bold text-xs sm:text-sm leading-tight truncate">
-                Cài đặt App trên điện thoại
+                Cài đặt ứng dụng trên điện thoại
               </span>
               <span className="hidden sm:inline-flex items-center gap-0.5 text-[10px] font-extrabold bg-amber-400 text-amber-950 px-1.5 py-0.2 rounded-md">
-                <Sparkles className="w-2.5 h-2.5" /> Chuẩn PWA
+                <Sparkles className="w-2.5 h-2.5" /> Mở toàn màn hình
               </span>
             </div>
             <p className="text-[11px] text-blue-100 font-medium truncate leading-tight mt-0.5">
@@ -112,7 +112,7 @@ export default function InstallSmartBanner({ onOpenGuide, deferredPrompt, onInst
             className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white text-blue-700 hover:bg-blue-50 active:scale-95 font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer whitespace-nowrap disabled:opacity-50"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>{isInstalling ? 'Đang cài...' : deferredPrompt ? 'Cài đặt ngay' : 'Cài đặt App'}</span>
+            <span>{isInstalling ? 'Đang cài...' : deferredPrompt ? 'Cài đặt ngay' : 'Cài đặt ứng dụng'}</span>
           </button>
 
           <button

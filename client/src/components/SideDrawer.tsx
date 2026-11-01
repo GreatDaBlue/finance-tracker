@@ -542,10 +542,10 @@ export default function SideDrawer({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <h4 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-zinc-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate">
-                      Cài đặt App điện thoại
+                      Cài đặt ứng dụng
                     </h4>
                     <span className="text-[9px] font-extrabold bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 px-1 py-0.2 rounded-sm shrink-0">
-                      PWA
+                      Miễn phí
                     </span>
                   </div>
                   <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-zinc-400 font-medium truncate">
