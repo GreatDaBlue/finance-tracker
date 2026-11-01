@@ -831,17 +831,17 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
         {expenseCategories.length > 0 && (
           <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 p-5 transition-colors">
             <h3 className="text-sm font-semibold text-slate-700 dark:text-zinc-200 mb-4">Phân bổ chi tiêu</h3>
-            <div className="flex gap-4 items-center">
-              <div className="relative w-1/2 h-[180px] flex items-center justify-center shrink-0">
-                <ResponsiveContainer width="100%" height={180}>
+            <div className="flex gap-3 sm:gap-4 items-center">
+              <div className="relative w-[140px] sm:w-[155px] h-[160px] sm:h-[180px] flex items-center justify-center shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
                       data={expenseCategories}
                       dataKey="total"
                       nameKey="category"
                       cx="50%" cy="50%"
-                      innerRadius={45}
-                      outerRadius={80}
+                      innerRadius={42}
+                      outerRadius={70}
                       paddingAngle={2}
                     >
                       {expenseCategories.map((_, i) => (
@@ -866,12 +866,16 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
                 </div>
               </div>
 
-              <div className="flex-1 space-y-2 overflow-y-auto max-h-[180px] pr-1">
+              <div className="flex-1 min-w-0 space-y-2 overflow-y-auto max-h-[190px] pr-1">
                 {expenseCategories.map((cat, i) => (
-                  <div key={cat.category} className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                    <span className="text-xs text-slate-600 dark:text-zinc-300 flex-1 truncate">{getCategoryDisplayIcon(cat.category, cat.icon)} {cat.category}</span>
-                    <span className="text-xs font-medium text-slate-700 dark:text-zinc-300 flex-shrink-0">
+                  <div key={cat.category} className="flex items-center justify-between gap-1.5 py-0.5">
+                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                      <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                      <span className="text-xs text-slate-700 dark:text-zinc-200 font-medium leading-snug whitespace-normal break-words" title={cat.category}>
+                        {getCategoryDisplayIcon(cat.category, cat.icon)} {cat.category}
+                      </span>
+                    </div>
+                    <span className="text-xs font-bold text-slate-800 dark:text-zinc-100 shrink-0 ml-1 tabular-nums">
                       {pieTotal > 0 ? Math.round((cat.total / pieTotal) * 100) : 0}%
                     </span>
                   </div>
