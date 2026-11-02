@@ -4,9 +4,14 @@ import { api, formatVND, getUserDisplayName, type SummaryStats, type CategorySta
 import { getCategoryIcon } from '../lib/smartParser';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend,
+  AreaChart, Area
 } from 'recharts';
-import { TrendingUp, TrendingDown, Wallet, ArrowUpRight, ArrowDownRight, HelpCircle, CreditCard as CreditCardIcon, X, Calendar, ChevronDown } from 'lucide-react';
+import {
+  TrendingUp, TrendingDown, Wallet, ArrowUpRight, ArrowDownRight,
+  HelpCircle, CreditCard as CreditCardIcon, X, Calendar, ChevronDown,
+  Activity, BarChart3, Sparkles
+} from 'lucide-react';
 
 interface Props {
   filters: FilterParams;
@@ -15,9 +20,10 @@ interface Props {
   refreshKey?: number;
 }
 
+// Bảng màu Fintech cao cấp (UI/UX Pro Max) — Tương phản cao, rực rỡ và hài hòa trên Dark Mode
 const COLORS = [
-  '#3b82f6', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6',
-  '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16'
+  '#38bdf8', '#f43f5e', '#10b981', '#fbbf24', '#a855f7',
+  '#ec4899', '#06b6d4', '#f97316', '#6366f1', '#4ade80'
 ];
 
 const CATEGORY_ICONS: Record<string, string> = {
@@ -311,6 +317,7 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
   const [catStats, setCatStats] = useState<CategoryStat[]>([]);
   const [dateStats, setDateStats] = useState<DateStat[]>([]);
   const [chartGroup, setChartGroup] = useState<'day' | 'month' | 'quarter' | 'year'>('month');
+  const [chartType, setChartType] = useState<'wave' | 'bar'>('wave');
   const [loading, setLoading] = useState(true);
   const [showRuleTooltip, setShowRuleTooltip] = useState(false);
   const [creditSummary, setCreditSummary] = useState<CreditCardSummary | null>(null);
@@ -397,10 +404,30 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
 
   if (loading && !summary) {
     return (
-      <div className="grid grid-cols-3 gap-4">
-        {[1, 2, 3].map(i => (
-          <div key={i} className="bg-white rounded-2xl border border-slate-100 p-5 h-28 animate-pulse bg-slate-50" />
-        ))}
+      <div className="space-y-4 animate-pulse">
+        {/* Skeleton thanh lọc chu kỳ */}
+        <div className="h-12 bg-white dark:bg-[#121215] rounded-2xl border border-slate-100 dark:border-zinc-800/80 p-2.5 flex items-center gap-2">
+          <div className="w-16 h-6 bg-slate-200 dark:bg-zinc-800 rounded-lg" />
+          <div className="w-20 h-7 bg-slate-200 dark:bg-zinc-800 rounded-xl" />
+          <div className="w-20 h-7 bg-slate-200 dark:bg-zinc-800 rounded-xl" />
+          <div className="w-20 h-7 bg-slate-200 dark:bg-zinc-800 rounded-xl" />
+        </div>
+
+        {/* Skeleton 3 thẻ metrics Bento */}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-4">
+          <div className="col-span-2 md:col-span-1 md:order-3 h-36 bg-gradient-to-br from-blue-600/30 via-indigo-600/20 to-indigo-900/40 rounded-2xl border border-blue-500/20 p-4 flex flex-col justify-between" />
+          <div className="col-span-1 md:order-1 h-36 bg-white dark:bg-[#121215] rounded-2xl border border-slate-100 dark:border-zinc-800/80 p-4 flex flex-col justify-between" />
+          <div className="col-span-1 md:order-2 h-36 bg-white dark:bg-[#121215] rounded-2xl border border-slate-100 dark:border-zinc-800/80 p-4 flex flex-col justify-between" />
+        </div>
+
+        {/* Skeleton Thẻ tỷ lệ tiết kiệm */}
+        <div className="h-28 bg-white dark:bg-[#121215] rounded-2xl border border-slate-100 dark:border-zinc-800/80 p-5 flex items-center justify-between" />
+
+        {/* Skeleton 2 biểu đồ */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="h-64 bg-white dark:bg-[#121215] rounded-2xl border border-slate-100 dark:border-zinc-800/80 p-5" />
+          <div className="h-64 bg-white dark:bg-[#121215] rounded-2xl border border-slate-100 dark:border-zinc-800/80 p-5" />
+        </div>
       </div>
     );
   }
@@ -421,7 +448,7 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
   return (
     <div className="space-y-4">
       {/* Nút Xem nhanh chu kỳ thời gian cho Tab Tổng quan (Hôm nay, Tháng này, Quý này, Năm nay & Chọn từng tháng) */}
-      <div className="flex items-center gap-2 p-2.5 sm:p-3 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-100 dark:border-zinc-800 shadow-2xs flex-wrap transition-colors">
+      <div className="flex items-center gap-2 p-2.5 sm:p-3 bg-white dark:bg-[#121215] rounded-2xl border border-slate-100 dark:border-zinc-800/80 shadow-2xs flex-wrap transition-colors">
         <span className="text-xs font-medium text-slate-400 dark:text-zinc-500 mr-1 shrink-0">Xem nhanh:</span>
         <button
           type="button"
@@ -429,7 +456,7 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
             setQuickPeriod('today');
             setChartGroup('day');
           }}
-          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border cursor-pointer ${
+          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border cursor-pointer active:scale-95 ${
             quickPeriod === 'today'
               ? 'bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-500/20'
               : 'border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-700'
@@ -443,7 +470,7 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
             setQuickPeriod('month');
             setChartGroup('month');
           }}
-          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border cursor-pointer ${
+          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border cursor-pointer active:scale-95 ${
             quickPeriod === 'month'
               ? 'bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-500/20'
               : 'border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-700'
@@ -457,7 +484,7 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
             setQuickPeriod('quarter');
             setChartGroup('month');
           }}
-          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border cursor-pointer ${
+          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border cursor-pointer active:scale-95 ${
             quickPeriod === 'quarter'
               ? 'bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-500/20'
               : 'border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-700'
@@ -471,7 +498,7 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
             setQuickPeriod('year');
             setChartGroup('month');
           }}
-          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border cursor-pointer ${
+          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border cursor-pointer active:scale-95 ${
             quickPeriod === 'year'
               ? 'bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-500/20'
               : 'border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-700'
@@ -548,7 +575,7 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
             <button
               type="button"
               onClick={() => onSwitchTab('debt')}
-              className={`shrink-0 px-3 py-1.5 rounded-xl font-bold text-xs transition-colors shadow-2xs ${
+              className={`shrink-0 px-3 py-1.5 rounded-xl font-bold text-xs transition-colors shadow-2xs cursor-pointer active:scale-95 ${
                 creditSummary.overdueCount > 0
                   ? 'bg-rose-600 hover:bg-rose-700 text-white'
                   : 'bg-amber-600 hover:bg-amber-700 text-white'
@@ -560,13 +587,13 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
         </div>
       )}
 
-      {/* Summary cards — Mobile: Dòng tiền ròng làm Hero card full-width ở trên, 2 cột Thu & Chi ở dưới. Desktop: 3 cột ngang chuẩn */}
+      {/* Summary cards — Bento Grid Fintech: Hero card dòng tiền ròng, Thẻ Tổng thu & Thẻ Tổng chi */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-4">
         {/* Dòng tiền ròng — Hero Card trên Mobile (col-span-2 md:col-span-1 md:order-3) */}
-        <div className={`col-span-2 md:col-span-1 md:order-3 rounded-2xl shadow-sm border p-3.5 sm:p-5 transition-all flex flex-col justify-between ${
+        <div className={`col-span-2 md:col-span-1 md:order-3 rounded-2xl border p-3.5 sm:p-5 transition-all duration-200 hover:-translate-y-0.5 flex flex-col justify-between ${
           (summary?.balance ?? 0) >= 0
-            ? 'bg-gradient-to-br from-blue-600 via-blue-600 to-indigo-700 border-blue-500 text-white shadow-md shadow-blue-500/15'
-            : 'bg-gradient-to-br from-rose-600 via-rose-600 to-red-700 border-rose-500 text-white shadow-md shadow-rose-500/15'
+            ? 'bg-gradient-to-br from-blue-600 via-indigo-600 to-indigo-900 border-blue-500/40 text-white shadow-lg shadow-blue-600/15 hover:shadow-blue-500/25'
+            : 'bg-gradient-to-br from-rose-600 via-rose-700 to-red-900 border-rose-500/40 text-white shadow-lg shadow-rose-600/15 hover:shadow-rose-500/25'
         }`}>
           <div>
             <div className="flex items-center justify-between mb-2 gap-2">
@@ -575,7 +602,7 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
                   Dòng tiền ròng (Số dư)
                 </span>
                 <span className={`text-[10px] px-2 py-0.5 rounded-md font-extrabold ${
-                  (summary?.balance ?? 0) >= 0 ? 'bg-white/20 text-white' : 'bg-black/25 text-white'
+                  (summary?.balance ?? 0) >= 0 ? 'bg-emerald-400/25 text-emerald-200 border border-emerald-400/30' : 'bg-black/30 text-rose-200 border border-rose-400/30'
                 }`}>
                   {(summary?.balance ?? 0) >= 0 ? 'Thặng dư (+)' : 'Thâm hụt (-)'}
                 </span>
@@ -585,7 +612,7 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
               </div>
             </div>
 
-            <p className="text-xl xs:text-2xl sm:text-2xl md:text-3xl font-black text-white tracking-tight tabular-nums py-0.5" title={formatVND(summary?.balance ?? 0)}>
+            <p className="text-xl xs:text-2xl sm:text-3xl font-black text-white tracking-tight tabular-nums py-0.5 whitespace-nowrap overflow-hidden text-ellipsis" title={formatVND(summary?.balance ?? 0)}>
               {(summary?.balance ?? 0) > 0
                 ? `+${formatVND(summary?.balance ?? 0)}`
                 : formatVND(summary?.balance ?? 0)}
@@ -603,17 +630,17 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
         </div>
 
         {/* Tổng thu — col-span-1 md:order-1 */}
-        <div className="col-span-1 md:order-1 bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 p-3 sm:p-5 transition-colors flex flex-col justify-between">
+        <div className="col-span-1 md:order-1 bg-white dark:bg-[#121215] rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800/80 hover:dark:border-emerald-500/30 p-3 sm:p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-1.5 sm:mb-2 gap-1">
               <span className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 font-medium leading-tight">
                 Tổng thu
               </span>
-              <div className="w-6 h-6 sm:w-8 sm:h-8 bg-emerald-50 dark:bg-emerald-950/60 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0">
+              <div className="w-6 h-6 sm:w-8 sm:h-8 bg-emerald-50 dark:bg-emerald-950/60 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0 border border-emerald-100 dark:border-emerald-900/60 shadow-2xs">
                 <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600 dark:text-emerald-400" />
               </div>
             </div>
-            <p className="text-sm xs:text-base sm:text-xl md:text-2xl font-bold text-emerald-600 dark:text-emerald-400 tracking-tight tabular-nums" title={formatVND(summary?.totalIncome ?? 0)}>
+            <p className="text-sm xs:text-base sm:text-xl md:text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight tabular-nums whitespace-nowrap overflow-hidden text-ellipsis" title={formatVND(summary?.totalIncome ?? 0)}>
               {formatVND(summary?.totalIncome ?? 0)}
             </p>
           </div>
@@ -635,17 +662,17 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
         </div>
 
         {/* Tổng chi — col-span-1 md:order-2 */}
-        <div className="col-span-1 md:order-2 bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 p-3 sm:p-5 transition-colors flex flex-col justify-between">
+        <div className="col-span-1 md:order-2 bg-white dark:bg-[#121215] rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800/80 hover:dark:border-rose-500/30 p-3 sm:p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-1.5 sm:mb-2 gap-1">
               <span className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 font-medium leading-tight">
                 Tổng chi
               </span>
-              <div className="w-6 h-6 sm:w-8 sm:h-8 bg-rose-50 dark:bg-rose-950/60 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0">
+              <div className="w-6 h-6 sm:w-8 sm:h-8 bg-rose-50 dark:bg-rose-950/60 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0 border border-rose-100 dark:border-rose-900/60 shadow-2xs">
                 <TrendingDown className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-rose-500 dark:text-rose-400" />
               </div>
             </div>
-            <p className="text-sm xs:text-base sm:text-xl md:text-2xl font-bold text-rose-500 dark:text-rose-400 tracking-tight tabular-nums" title={formatVND(summary?.totalExpense ?? 0)}>
+            <p className="text-sm xs:text-base sm:text-xl md:text-2xl font-black text-rose-500 dark:text-rose-400 tracking-tight tabular-nums whitespace-nowrap overflow-hidden text-ellipsis" title={formatVND(summary?.totalExpense ?? 0)}>
               {formatVND(summary?.totalExpense ?? 0)}
             </p>
           </div>
@@ -672,7 +699,7 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
       </div>
 
       {/* Thẻ Tiến độ Tỷ lệ tiết kiệm (Savings Rate Gauge) */}
-      <div className="p-5 rounded-2xl bg-white dark:bg-zinc-900 shadow-sm border border-slate-100 dark:border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-4 transition-colors">
+      <div className="p-5 rounded-2xl bg-white dark:bg-[#121215] shadow-sm border border-slate-100 dark:border-zinc-800/80 hover:dark:border-zinc-700/80 flex flex-col sm:flex-row items-center justify-between gap-4 transition-all duration-200 hover:-translate-y-0.5">
         <div className="space-y-1.5 text-center sm:text-left flex-1">
           <div className="flex items-center justify-center sm:justify-start gap-1.5 flex-wrap">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500">Chỉ số tài chính</span>
@@ -825,12 +852,15 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
         </div>
       </div>
 
-      {/* Charts row */}
+      {/* Charts row — Bento Grid: Donut Phân bổ chi tiêu & Biểu đồ Dòng tiền (Cashflow Glow Area / Bar) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Pie chart — expense by category */}
         {expenseCategories.length > 0 && (
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 p-5 transition-colors">
-            <h3 className="text-sm font-semibold text-slate-700 dark:text-zinc-200 mb-4">Phân bổ chi tiêu</h3>
+          <div className="bg-white dark:bg-[#121215] rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800/80 hover:dark:border-zinc-700/80 p-5 transition-all duration-200 hover:-translate-y-0.5">
+            <h3 className="text-sm font-semibold text-slate-700 dark:text-zinc-200 mb-4 flex items-center justify-between">
+              <span>Phân bổ chi tiêu</span>
+              <span className="text-[11px] font-normal text-slate-400 dark:text-zinc-500">{timePeriodLabel}</span>
+            </h3>
             <div className="flex gap-3 sm:gap-4 items-center">
               <div className="relative w-[140px] sm:w-[155px] h-[160px] sm:h-[180px] flex items-center justify-center shrink-0">
                 <ResponsiveContainer width="100%" height="100%">
@@ -840,9 +870,10 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
                       dataKey="total"
                       nameKey="category"
                       cx="50%" cy="50%"
-                      innerRadius={42}
-                      outerRadius={70}
-                      paddingAngle={2}
+                      innerRadius={46}
+                      outerRadius={72}
+                      paddingAngle={3}
+                      stroke="none"
                     >
                       {expenseCategories.map((_, i) => (
                         <Cell key={i} fill={COLORS[i % COLORS.length]} />
@@ -850,7 +881,7 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
                     </Pie>
                     <Tooltip
                       formatter={(val: number) => [formatVND(val), '']}
-                      contentStyle={{ borderRadius: 12, border: 'none', backgroundColor: '#18181b', color: '#fff', boxShadow: '0 4px 20px rgba(0,0,0,0.3)' }}
+                      contentStyle={{ borderRadius: 12, border: '1px solid #27272a', backgroundColor: '#09090b', color: '#fff', boxShadow: '0 8px 25px rgba(0,0,0,0.5)' }}
                     />
                   </PieChart>
                 </ResponsiveContainer>
@@ -870,7 +901,7 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
                 {expenseCategories.map((cat, i) => (
                   <div key={cat.category} className="flex items-center justify-between gap-1.5 py-0.5">
                     <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                      <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                      <div className="w-2.5 h-2.5 rounded-full shrink-0 shadow-2xs" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
                       <span className="text-xs text-slate-700 dark:text-zinc-200 font-medium leading-snug whitespace-normal break-words" title={cat.category}>
                         {getCategoryDisplayIcon(cat.category, cat.icon)} {cat.category}
                       </span>
@@ -885,12 +916,43 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
           </div>
         )}
 
-        {/* Bar chart — income vs expense by period */}
+        {/* Biểu đồ Dòng tiền — Cashflow Trend (Hỗ trợ Chuyển đổi Area Wave Glow & Bar) */}
         {dateStats.length > 0 && (
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 p-5 transition-colors">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-slate-700 dark:text-zinc-200">Thu chi theo thời gian</h3>
-              <div className="flex rounded-lg overflow-hidden border border-slate-200 dark:border-zinc-700 text-xs bg-slate-50 dark:bg-zinc-800">
+          <div className="bg-white dark:bg-[#121215] rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800/80 hover:dark:border-zinc-700/80 p-5 transition-all duration-200 hover:-translate-y-0.5">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-slate-700 dark:text-zinc-200">Xu hướng dòng tiền</h3>
+                {/* Nút Toggle Kiểu biểu đồ: Sóng lượn phát sáng vs Cột */}
+                <div className="flex rounded-lg overflow-hidden border border-slate-200 dark:border-zinc-700/80 p-0.5 bg-slate-100 dark:bg-zinc-800/60">
+                  <button
+                    type="button"
+                    onClick={() => setChartType('wave')}
+                    className={`p-1 rounded-md transition-all cursor-pointer ${
+                      chartType === 'wave'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                    title="Dạng sóng phát sáng (Cashflow Area Glow)"
+                  >
+                    <Activity className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChartType('bar')}
+                    className={`p-1 rounded-md transition-all cursor-pointer ${
+                      chartType === 'bar'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                    title="Dạng cột so sánh (Bar Chart)"
+                  >
+                    <BarChart3 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Nhóm chu kỳ Ngày / Tháng / Quý / Năm */}
+              <div className="flex rounded-lg overflow-hidden border border-slate-200 dark:border-zinc-700/80 text-xs bg-slate-50 dark:bg-zinc-800/60">
                 {([
                   { key: 'day', label: 'Ngày' },
                   { key: 'month', label: 'Tháng' },
@@ -900,7 +962,7 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
                   <button
                     key={key}
                     onClick={() => setChartGroup(key)}
-                    className={`px-2 sm:px-2.5 py-1 transition-colors ${
+                    className={`px-2 sm:px-2.5 py-1 transition-all cursor-pointer ${
                       chartGroup === key
                         ? 'bg-blue-600 text-white font-medium shadow-sm'
                         : 'text-slate-500 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-700'
@@ -911,57 +973,139 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
                 ))}
               </div>
             </div>
+
             <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={dateStats} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.3} />
-                <XAxis
-                  dataKey="period"
-                  tickFormatter={(p: string) => {
-                    if (chartGroup === 'quarter') {
-                      const m = p.match(/^(\d{4})-Q(\d)$/);
-                      if (m) return `Q${m[2]}/${m[1].slice(2)}`;
-                    } else if (chartGroup === 'month') {
-                      const m = p.match(/^(\d{4})-(\d{2})$/);
-                      if (m) return `${m[2]}/${m[1].slice(2)}`;
-                    } else if (chartGroup === 'day') {
-                      const m = p.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-                      if (m) return `${m[3]}/${m[2]}`;
-                    }
-                    return p;
-                  }}
-                  tick={{ fontSize: 11, fill: '#94a3b8' }}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <YAxis
-                  tickFormatter={formatShortVND}
-                  tick={{ fontSize: 11, fill: '#94a3b8' }}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <Tooltip
-                  labelFormatter={(label: string) => {
-                    if (chartGroup === 'quarter') {
-                      const m = label.match(/^(\d{4})-Q(\d)$/);
-                      if (m) return `Quý ${m[2]} năm ${m[1]}`;
-                    } else if (chartGroup === 'month') {
-                      const m = label.match(/^(\d{4})-(\d{2})$/);
-                      if (m) return `Tháng ${m[2]}/${m[1]}`;
-                    } else if (chartGroup === 'year') {
-                      return `Năm ${label}`;
-                    } else if (chartGroup === 'day') {
-                      const m = label.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-                      if (m) return `Ngày ${m[3]}/${m[2]}/${m[1]}`;
-                    }
-                    return label;
-                  }}
-                  formatter={(val: number) => [formatVND(val), '']}
-                  contentStyle={{ borderRadius: 12, border: 'none', backgroundColor: '#18181b', color: '#fff', boxShadow: '0 4px 20px rgba(0,0,0,0.3)' }}
-                />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="income" name="Thu" fill="#22c55e" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="expense" name="Chi" fill="#ef4444" radius={[4, 4, 0, 0]} />
-              </BarChart>
+              {chartType === 'wave' ? (
+                <AreaChart data={dateStats} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
+                  <defs>
+                    {/* Gradient phát sáng cho Thu nhập (Emerald Glow) */}
+                    <linearGradient id="incomeGlow" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
+                    </linearGradient>
+                    {/* Gradient phát sáng cho Chi tiêu (Rose Glow) */}
+                    <linearGradient id="expenseGlow" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.35} />
+                      <stop offset="95%" stopColor="#f43f5e" stopOpacity={0.0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.2} />
+                  <XAxis
+                    dataKey="period"
+                    tickFormatter={(p: string) => {
+                      if (chartGroup === 'quarter') {
+                        const m = p.match(/^(\d{4})-Q(\d)$/);
+                        if (m) return `Q${m[2]}/${m[1].slice(2)}`;
+                      } else if (chartGroup === 'month') {
+                        const m = p.match(/^(\d{4})-(\d{2})$/);
+                        if (m) return `${m[2]}/${m[1].slice(2)}`;
+                      } else if (chartGroup === 'day') {
+                        const m = p.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                        if (m) return `${m[3]}/${m[2]}`;
+                      }
+                      return p;
+                    }}
+                    tick={{ fontSize: 11, fill: '#94a3b8' }}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    tickFormatter={formatShortVND}
+                    tick={{ fontSize: 11, fill: '#94a3b8' }}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <Tooltip
+                    labelFormatter={(label: string) => {
+                      if (chartGroup === 'quarter') {
+                        const m = label.match(/^(\d{4})-Q(\d)$/);
+                        if (m) return `Quý ${m[2]} năm ${m[1]}`;
+                      } else if (chartGroup === 'month') {
+                        const m = label.match(/^(\d{4})-(\d{2})$/);
+                        if (m) return `Tháng ${m[2]}/${m[1]}`;
+                      } else if (chartGroup === 'year') {
+                        return `Năm ${label}`;
+                      } else if (chartGroup === 'day') {
+                        const m = label.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                        if (m) return `Ngày ${m[3]}/${m[2]}/${m[1]}`;
+                      }
+                      return label;
+                    }}
+                    formatter={(val: number) => [formatVND(val), '']}
+                    contentStyle={{ borderRadius: 12, border: '1px solid #27272a', backgroundColor: '#09090b', color: '#fff', boxShadow: '0 8px 25px rgba(0,0,0,0.5)' }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Area
+                    type="monotone"
+                    dataKey="income"
+                    name="Thu nhập"
+                    stroke="#10b981"
+                    strokeWidth={2.5}
+                    fillOpacity={1}
+                    fill="url(#incomeGlow)"
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="expense"
+                    name="Chi tiêu"
+                    stroke="#f43f5e"
+                    strokeWidth={2.5}
+                    fillOpacity={1}
+                    fill="url(#expenseGlow)"
+                  />
+                </AreaChart>
+              ) : (
+                <BarChart data={dateStats} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.2} />
+                  <XAxis
+                    dataKey="period"
+                    tickFormatter={(p: string) => {
+                      if (chartGroup === 'quarter') {
+                        const m = p.match(/^(\d{4})-Q(\d)$/);
+                        if (m) return `Q${m[2]}/${m[1].slice(2)}`;
+                      } else if (chartGroup === 'month') {
+                        const m = p.match(/^(\d{4})-(\d{2})$/);
+                        if (m) return `${m[2]}/${m[1].slice(2)}`;
+                      } else if (chartGroup === 'day') {
+                        const m = p.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                        if (m) return `${m[3]}/${m[2]}`;
+                      }
+                      return p;
+                    }}
+                    tick={{ fontSize: 11, fill: '#94a3b8' }}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    tickFormatter={formatShortVND}
+                    tick={{ fontSize: 11, fill: '#94a3b8' }}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <Tooltip
+                    labelFormatter={(label: string) => {
+                      if (chartGroup === 'quarter') {
+                        const m = label.match(/^(\d{4})-Q(\d)$/);
+                        if (m) return `Quý ${m[2]} năm ${m[1]}`;
+                      } else if (chartGroup === 'month') {
+                        const m = label.match(/^(\d{4})-(\d{2})$/);
+                        if (m) return `Tháng ${m[2]}/${m[1]}`;
+                      } else if (chartGroup === 'year') {
+                        return `Năm ${label}`;
+                      } else if (chartGroup === 'day') {
+                        const m = label.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                        if (m) return `Ngày ${m[3]}/${m[2]}/${m[1]}`;
+                      }
+                      return label;
+                    }}
+                    formatter={(val: number) => [formatVND(val), '']}
+                    contentStyle={{ borderRadius: 12, border: '1px solid #27272a', backgroundColor: '#09090b', color: '#fff', boxShadow: '0 8px 25px rgba(0,0,0,0.5)' }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Bar dataKey="income" name="Thu" fill="#10b981" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="expense" name="Chi" fill="#f43f5e" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              )}
             </ResponsiveContainer>
           </div>
         )}
@@ -969,26 +1113,26 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
 
       {/* Top categories table */}
       {catStats.length > 0 && (
-        <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 p-5 transition-colors">
+        <div className="bg-white dark:bg-[#121215] rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800/80 hover:dark:border-zinc-700/80 p-5 transition-all duration-200 hover:-translate-y-0.5">
           <h3 className="text-sm font-semibold text-slate-700 dark:text-zinc-200 mb-4">Top danh mục chi tiêu</h3>
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {catStats.slice(0, 5).map((cat, i) => (
               <div key={cat.category} className="flex items-center gap-3">
-                <span className="text-slate-400 dark:text-zinc-500 text-xs w-4">{i + 1}</span>
+                <span className="text-slate-400 dark:text-zinc-500 text-xs w-4 font-bold">{i + 1}</span>
                 <span className="text-lg">{getCategoryDisplayIcon(cat.category, cat.icon)}</span>
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm text-slate-700 dark:text-zinc-300">{cat.category}</span>
-                    <span className="text-sm font-semibold text-red-500 dark:text-rose-400">{formatVND(cat.total)}</span>
+                    <span className="text-sm text-slate-700 dark:text-zinc-300 font-medium">{cat.category}</span>
+                    <span className="text-sm font-bold text-rose-500 dark:text-rose-400 tabular-nums">{formatVND(cat.total)}</span>
                   </div>
-                  <div className="w-full bg-slate-100 dark:bg-zinc-800 rounded-full h-1.5">
+                  <div className="w-full bg-slate-100 dark:bg-zinc-800/80 rounded-full h-1.5 overflow-hidden">
                     <div
-                      className="h-1.5 rounded-full bg-red-400 dark:bg-rose-500"
+                      className="h-1.5 rounded-full bg-rose-500 transition-all duration-500"
                       style={{ width: `${pieTotal > 0 ? (cat.total / pieTotal) * 100 : 0}%` }}
                     />
                   </div>
                 </div>
-                <span className="text-xs text-slate-400 dark:text-zinc-500 w-8 text-right">{cat.count}x</span>
+                <span className="text-xs text-slate-400 dark:text-zinc-500 w-8 text-right font-medium">{cat.count}x</span>
               </div>
             ))}
           </div>

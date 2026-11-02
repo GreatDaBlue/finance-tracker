@@ -8,7 +8,7 @@
   }
 
   body {
-    @apply bg-slate-50 text-slate-900 antialiased;
+    @apply bg-slate-50 dark:bg-[#09090b] text-slate-900 dark:text-zinc-100 antialiased;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     font-variant-numeric: tabular-nums;
     overflow-x: hidden;
@@ -22,21 +22,34 @@
 
 @layer utilities {
   .text-income {
-    @apply text-green-600;
+    @apply text-emerald-600 dark:text-emerald-400;
   }
   .text-expense {
-    @apply text-red-500;
+    @apply text-rose-500 dark:text-rose-400;
   }
   .bg-income {
-    @apply bg-green-50;
+    @apply bg-emerald-50 dark:bg-emerald-950/40;
   }
   .bg-expense {
-    @apply bg-red-50;
+    @apply bg-rose-50 dark:bg-rose-950/40;
+  }
+
+  /* Hiệu ứng hào quang phát sáng nhẹ chuẩn Fintech (Subtle Glow) */
+  .glow-emerald {
+    box-shadow: 0 0 20px -3px rgba(16, 185, 129, 0.25);
+  }
+  .glow-rose {
+    box-shadow: 0 0 20px -3px rgba(244, 63, 94, 0.25);
+  }
+  .glow-blue {
+    box-shadow: 0 0 25px -4px rgba(59, 130, 246, 0.3);
   }
 }
 
-/* Scrollbar */
+/* Scrollbar mượt mà cho Dark Mode */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 9999px; }
+.dark ::-webkit-scrollbar-thumb { background: #27272a; }
+::-webkit-scrollbar-thumb:hover { background: #64748b; }
+.dark ::-webkit-scrollbar-thumb:hover { background: #3f3f46; }

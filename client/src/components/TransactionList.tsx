@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api, formatVND, formatDate, getUserDisplayName, type Transaction, type FilterParams, type User } from '../lib/api';
 import { getCategoryIcon } from '../lib/smartParser';
 import { exportToExcel, exportToCSV } from '../lib/exportUtils';
-import { Pencil, Trash2, X, Download, FileSpreadsheet, CheckSquare, Square, AlertTriangle } from 'lucide-react';
+import { Pencil, Trash2, X, Download, FileSpreadsheet, CheckSquare, Square, AlertTriangle, Wallet, PlusCircle, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface Props {
@@ -295,12 +295,25 @@ export default function TransactionList({
     }
   }
 
-  // Trạng thái đang tải dữ liệu ban đầu
+  // Trạng thái đang tải dữ liệu ban đầu — Skeleton Loading (loại bỏ Cumulative Layout Shift)
   if (loading && transactions.length === 0) {
     return (
-      <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 p-8 text-center text-slate-400 dark:text-zinc-500 transition-colors">
-        <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-3" />
-        Đang tải giao dịch...
+      <div className="space-y-3 animate-pulse">
+        {[1, 2, 3, 4, 5].map(i => (
+          <div
+            key={i}
+            className="bg-white dark:bg-[#121215] rounded-2xl border border-slate-100 dark:border-zinc-800/80 p-3.5 sm:p-4 flex items-center justify-between gap-3 shadow-2xs"
+          >
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <div className="w-10 h-10 rounded-2xl bg-slate-200 dark:bg-zinc-800 shrink-0" />
+              <div className="space-y-2 flex-1 min-w-0">
+                <div className="w-32 sm:w-48 h-3.5 bg-slate-200 dark:bg-zinc-800 rounded-md" />
+                <div className="w-20 sm:w-28 h-2.5 bg-slate-100 dark:bg-zinc-800/60 rounded-md" />
+              </div>
+            </div>
+            <div className="w-20 sm:w-28 h-5 bg-slate-200 dark:bg-zinc-800 rounded-md shrink-0" />
+          </div>
+        ))}
       </div>
     );
   }
@@ -308,20 +321,42 @@ export default function TransactionList({
   // Khi danh sách hiển thị tạm thời hết nhưng DB vẫn còn giao dịch (tránh bug hiện rỗng sai)
   if (transactions.length === 0 && total > 0) {
     return (
-      <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 p-8 text-center text-slate-400 dark:text-zinc-500 transition-colors">
+      <div className="bg-white dark:bg-[#121215] rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800/80 p-8 text-center text-slate-400 dark:text-zinc-500 transition-colors">
         <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-3" />
         Đang tải các giao dịch tiếp theo ({total} giao dịch)...
       </div>
     );
   }
 
-  // Khi thực sự không còn giao dịch nào trong DB
+  // Khi thực sự không còn giao dịch nào trong DB — Actionable Empty State (Impeccable UX)
   if (transactions.length === 0 && total === 0) {
     return (
-      <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 p-12 text-center transition-colors">
-        <p className="text-4xl mb-3">📭</p>
-        <p className="text-slate-600 dark:text-zinc-300 font-medium">Chưa có giao dịch nào</p>
-        <p className="text-slate-400 dark:text-zinc-500 text-sm mt-1">Thêm giao dịch đầu tiên của {userName}!</p>
+      <div className="bg-white dark:bg-[#121215] rounded-3xl shadow-sm border border-slate-100 dark:border-zinc-800/80 p-8 sm:p-12 text-center transition-all duration-200">
+        <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto rounded-3xl bg-gradient-to-br from-blue-500/10 via-indigo-500/10 to-purple-500/10 dark:from-blue-500/20 dark:to-purple-500/20 border border-blue-500/20 flex items-center justify-center mb-4 shadow-inner">
+          <Wallet className="w-8 h-8 sm:w-10 sm:h-10 text-blue-600 dark:text-blue-400" />
+        </div>
+        <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-zinc-100">
+          Chưa có giao dịch nào được ghi lại
+        </h3>
+        <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 mt-1 max-w-sm mx-auto leading-relaxed">
+          Bắt đầu quản lý tài chính thông minh bằng cách thêm khoản thu hoặc chi đầu tiên của {userName}!
+        </p>
+        <div className="mt-5">
+          <button
+            type="button"
+            onClick={() => {
+              const formInput = document.querySelector('input[name="description"], input[placeholder*="ăn trưa"]') as HTMLInputElement | null;
+              if (formInput) {
+                formInput.focus();
+                formInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }
+            }}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-semibold text-xs sm:text-sm shadow-md shadow-blue-500/20 transition-all cursor-pointer"
+          >
+            <Sparkles className="w-4 h-4 text-amber-300" />
+            <span>Thêm giao dịch ngay</span>
+          </button>
+        </div>
       </div>
     );
   }
@@ -447,9 +482,9 @@ export default function TransactionList({
         const dayExpense = dayTxns.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount || 0), 0);
 
         return (
-          <div key={date} className="bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800 overflow-hidden transition-colors">
+          <div key={date} className="bg-white dark:bg-[#121215] rounded-2xl shadow-sm border border-slate-100 dark:border-zinc-800/80 hover:dark:border-zinc-700/80 overflow-hidden transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
             {/* Date header */}
-            <div className="px-4 py-2.5 bg-slate-50 dark:bg-zinc-800/60 border-b border-slate-100 dark:border-zinc-800 flex items-center justify-between gap-2 flex-wrap">
+            <div className="px-4 py-2.5 bg-slate-50 dark:bg-zinc-800/40 border-b border-slate-100 dark:border-zinc-800/80 flex items-center justify-between gap-2 flex-wrap">
               <span className="text-sm font-semibold text-slate-700 dark:text-zinc-200 shrink-0">{formatDate(date)}</span>
               <div className="flex items-center gap-2.5 text-xs font-semibold shrink-0">
                 {dayIncome > 0 && <span className="text-emerald-600 dark:text-emerald-400">+{formatVND(dayIncome)}</span>}
@@ -458,7 +493,7 @@ export default function TransactionList({
             </div>
 
             {/* Transactions with Framer Motion slide-in */}
-            <div className="divide-y divide-slate-50 dark:divide-zinc-800/70">
+            <div className="divide-y divide-slate-50 dark:divide-zinc-800/60">
               <AnimatePresence initial={false}>
                 {dayTxns.map((t) => {
                   const isSelected = selectedIds.includes(t.id);
@@ -472,7 +507,7 @@ export default function TransactionList({
                       onClick={() => {
                         if (isSelectMode) toggleSelect(t.id);
                       }}
-                      className={`flex items-center gap-3 px-4 py-3 hover:bg-slate-50/80 dark:hover:bg-zinc-800/50 group transition-colors ${
+                      className={`flex items-center gap-3 px-3.5 sm:px-4 py-3 hover:bg-slate-50/80 dark:hover:bg-zinc-800/40 group transition-all duration-150 active:scale-[0.99] ${
                         isSelectMode ? 'cursor-pointer' : ''
                       } ${isSelected ? 'bg-blue-50/60 dark:bg-blue-950/30' : ''}`}
                     >
@@ -488,8 +523,8 @@ export default function TransactionList({
                       )}
 
                       {/* Icon */}
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0 ${
-                        t.type === 'income' ? 'bg-emerald-50 dark:bg-emerald-950/60' : 'bg-rose-50 dark:bg-rose-950/60'
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0 shadow-2xs ${
+                        t.type === 'income' ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/40' : 'bg-rose-50 dark:bg-rose-950/50 text-rose-500 dark:text-rose-400 border border-rose-100 dark:border-rose-900/40'
                       }`}>
                         {getCategoryIcon(t.category) || CATEGORY_ICONS[t.category] || '❓'}
                       </div>
@@ -515,33 +550,39 @@ export default function TransactionList({
                       <div className="text-right flex-shrink-0">
                         <p
                           title={formatVND(t.amount)}
-                          className={`text-sm sm:text-base font-bold tracking-tight tabular-nums ${t.type === 'income' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}
+                          className={`text-sm sm:text-base font-black tracking-tight tabular-nums whitespace-nowrap ${t.type === 'income' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}
                         >
                           {t.type === 'income' ? '+' : '-'}{formatCompactVND(t.amount)}
                         </p>
                       </div>
 
-                      {/* Actions (Vùng chạm tối ưu trên Mobile, hover trên Desktop) */}
+                      {/* Actions (Vùng chạm tối ưu trên Mobile >= 40px, hover trên Desktop) */}
                       {!isSelectMode && (
-                        <div className="flex items-center gap-0.5 sm:gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                        <div className="flex items-center gap-0.5 sm:gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0">
                           <button
                             type="button"
-                            onClick={() => setEditingId(t.id)}
-                            className="p-2 sm:p-1.5 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-950/70 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 active:scale-90 transition-all cursor-pointer"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingId(t.id);
+                            }}
+                            className="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-xl hover:bg-blue-50 dark:hover:bg-blue-950/70 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 active:scale-90 transition-all cursor-pointer"
                             title="Chỉnh sửa giao dịch"
                             aria-label="Chỉnh sửa giao dịch"
                           >
-                            <Pencil className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+                            <Pencil className="w-4 h-4" />
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleDelete(t.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(t.id);
+                            }}
                             disabled={deletingIds.has(t.id)}
-                            className="p-2 sm:p-1.5 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/70 text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 active:scale-90 transition-all cursor-pointer disabled:opacity-50"
+                            className="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/70 text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 active:scale-90 transition-all cursor-pointer disabled:opacity-50"
                             title="Xóa giao dịch"
                             aria-label="Xóa giao dịch"
                           >
-                            <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       )}

@@ -304,7 +304,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 transition-colors duration-200">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#09090b] text-slate-900 dark:text-zinc-100 transition-colors duration-200">
       {/* Modal đăng nhập / đăng ký nếu chưa có tài khoản */}
       {!currentUser && (
         <AuthModal
@@ -323,7 +323,7 @@ export default function HomePage() {
       />
 
       {/* Header */}
-      <header className="bg-white dark:bg-zinc-900/90 border-b border-slate-100 dark:border-zinc-800 sticky top-0 z-40 w-full backdrop-blur-md transition-colors">
+      <header className="bg-white/95 dark:bg-[#121215]/90 border-b border-slate-100 dark:border-zinc-800/80 sticky top-0 z-40 w-full backdrop-blur-md transition-colors shadow-2xs">
         <div className="w-full max-w-7xl mx-auto px-3 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between gap-1.5 sm:gap-2">
           {/* Logo & Tên app: Bấm vào mở Side Drawer */}
           <button
@@ -588,7 +588,7 @@ export default function HomePage() {
       {/* Thanh điều hướng Mobile (Bottom Navigation Bar) */}
       <nav
         aria-label="Thanh điều hướng chuyển tab trên điện thoại"
-        className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border-t border-slate-200/80 dark:border-zinc-800/80 shadow-[0_-4px_25px_rgba(0,0,0,0.06)] dark:shadow-black/60 md:hidden px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+        className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#121215]/95 backdrop-blur-md border-t border-slate-200/80 dark:border-zinc-800/80 shadow-[0_-4px_25px_rgba(0,0,0,0.06)] dark:shadow-black/70 md:hidden px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
       >
         <div className="grid grid-cols-4 gap-1 max-w-md mx-auto items-center">
           {NAV_TABS.map(tab => {
@@ -599,7 +599,7 @@ export default function HomePage() {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex flex-col items-center justify-center py-1.5 px-1 rounded-2xl transition-all duration-150 select-none ${
+                className={`flex flex-col items-center justify-center py-2 px-1 rounded-2xl min-h-[44px] transition-all duration-150 select-none active:scale-95 cursor-pointer ${
                   isActive
                     ? 'text-blue-600 dark:text-blue-400 font-bold bg-blue-50/90 dark:bg-blue-950/70 shadow-xs'
                     : 'text-gray-500 dark:text-zinc-400 hover:text-gray-700 dark:hover:text-zinc-200 font-medium'
