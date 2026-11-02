@@ -241,4 +241,21 @@ khóa   155.000
       }
     });
   });
+
+  describe('6. Nhận diện giọng nói tiếng Việt & Duy trì phiên đăng nhập bền vững', () => {
+    it('Bóc tách chính xác số tiền từ câu nói giọng nói bằng chữ thông dụng tiếng Việt', () => {
+      const voiceCases = [
+        { text: 'ăn trưa năm mươi nghìn', expectedAmount: 50000 },
+        { text: 'đổ xăng ba mươi lăm ngàn', expectedAmount: 35000 },
+        { text: 'mua áo hai trăm nghìn', expectedAmount: 200000 },
+        { text: 'nhận thưởng một triệu rưỡi', expectedAmount: 1500000 },
+        { text: 'cho Nam vay hai triệu', expectedAmount: 2000000 },
+      ];
+
+      for (const c of voiceCases) {
+        const parsed = parseSmartInput(c.text);
+        expect(parsed.amount, `Câu nói "${c.text}" phải parse ra ${c.expectedAmount}`).toBe(c.expectedAmount);
+      }
+    });
+  });
 });

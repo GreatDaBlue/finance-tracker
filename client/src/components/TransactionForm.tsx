@@ -104,12 +104,25 @@ export default function TransactionForm({ onCreated, user }: Props) {
       };
 
       recognition.onresult = (event: any) => {
+        // Nếu form đang submit, chặn 100% không cho transcript đè lại vào ô nhập liệu
+        if (submittingRef.current) return;
         let transcript = '';
+        let hasFinal = false;
         for (let i = 0; i < event.results.length; i++) {
           transcript += event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            hasFinal = true;
+          }
         }
-        if (transcript) {
+        if (transcript && !submittingRef.current) {
           setSmartText(transcript);
+        }
+        // Khi người dùng nói xong 1 câu trọn vẹn (isFinal = true), tự dừng mic để không treo mic
+        if (hasFinal && recognitionRef.current) {
+          try {
+            recognitionRef.current.stop();
+          } catch {}
+          setIsListening(false);
         }
       };
 
@@ -323,6 +336,18 @@ export default function TransactionForm({ onCreated, user }: Props) {
     submittingRef.current = true;
     setError('');
 
+    // Dập tắt ngay micro và hủy bỏ toàn bộ callback giọng nói để không ghi đè lại nội dung vừa xóa
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.onresult = null;
+        recognitionRef.current.onerror = null;
+        recognitionRef.current.onend = null;
+        recognitionRef.current.abort();
+      } catch {}
+      recognitionRef.current = null;
+    }
+    setIsListening(false);
+
     // Trường hợp 1: Nhập nhiều giao dịch cùng lúc (parsedItems.length > 1)
     if (parsedItems.length > 1) {
       setIsSubmitting(true);
@@ -404,8 +429,10 @@ export default function TransactionForm({ onCreated, user }: Props) {
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : 'Có lỗi khi lưu các giao dịch');
       } finally {
-        submittingRef.current = false;
-        setIsSubmitting(false);
+        setTimeout(() => {
+          submittingRef.current = false;
+          setIsSubmitting(false);
+        }, 150);
       }
       return;
     }
@@ -487,8 +514,10 @@ export default function TransactionForm({ onCreated, user }: Props) {
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : 'Có lỗi xảy ra khi lưu khoản nợ');
       } finally {
-        submittingRef.current = false;
-        setIsSubmitting(false);
+        setTimeout(() => {
+          submittingRef.current = false;
+          setIsSubmitting(false);
+        }, 150);
       }
       return;
     }
@@ -552,8 +581,10 @@ export default function TransactionForm({ onCreated, user }: Props) {
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Có lỗi xảy ra khi lưu giao dịch');
     } finally {
-      submittingRef.current = false;
-      setIsSubmitting(false);
+      setTimeout(() => {
+        submittingRef.current = false;
+        setIsSubmitting(false);
+      }, 150);
     }
   }
 

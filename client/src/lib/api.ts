@@ -196,27 +196,91 @@ const BASE = '/api';
 const TOKEN_KEY = 'financetracker_token';
 const USER_KEY = 'financetracker_user';
 
-export function getStoredToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY);
-}
-
-export function setStoredToken(token: string | null, remember = true): void {
-  if (token) {
-    if (remember) {
-      localStorage.setItem(TOKEN_KEY, token);
-      sessionStorage.removeItem(TOKEN_KEY);
-    } else {
-      sessionStorage.setItem(TOKEN_KEY, token);
-      localStorage.removeItem(TOKEN_KEY);
-    }
-  } else {
-    localStorage.removeItem(TOKEN_KEY);
-    sessionStorage.removeItem(TOKEN_KEY);
+// Helper quản lý Cookie bền vững cho iOS Safari & PWA Home Screen
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  try {
+    const match = document.cookie.match(new RegExp('(^|;\\s*)' + name + '=([^;]*)'));
+    return match ? decodeURIComponent(match[2]) : null;
+  } catch {
+    return null;
   }
 }
 
+function setCookie(name: string, val: string | null, days = 365): void {
+  if (typeof document === 'undefined') return;
+  try {
+    if (val) {
+      const maxAge = days * 24 * 60 * 60;
+      const secureFlag = window.location.protocol === 'https:' ? '; Secure' : '';
+      document.cookie = `${name}=${encodeURIComponent(val)}; path=/; max-age=${maxAge}; SameSite=Lax${secureFlag}`;
+    } else {
+      document.cookie = `${name}=; path=/; max-age=0; SameSite=Lax`;
+    }
+  } catch {}
+}
+
+export function getStoredToken(): string | null {
+  // 1. Thử lấy từ localStorage
+  try {
+    const local = localStorage.getItem(TOKEN_KEY);
+    if (local) return local;
+  } catch {}
+
+  // 2. Thử lấy từ sessionStorage
+  try {
+    const sess = sessionStorage.getItem(TOKEN_KEY);
+    if (sess) return sess;
+  } catch {}
+
+  // 3. Cứu cánh tối thượng cho iOS: Lấy từ Cookie nếu localStorage bị dọn dẹp
+  const fromCookie = getCookie(TOKEN_KEY);
+  if (fromCookie) {
+    try {
+      localStorage.setItem(TOKEN_KEY, fromCookie);
+    } catch {}
+    return fromCookie;
+  }
+
+  return null;
+}
+
+export function setStoredToken(token: string | null, remember = true): void {
+  try {
+    if (token) {
+      if (remember) {
+        localStorage.setItem(TOKEN_KEY, token);
+        sessionStorage.removeItem(TOKEN_KEY);
+      } else {
+        sessionStorage.setItem(TOKEN_KEY, token);
+        localStorage.removeItem(TOKEN_KEY);
+      }
+    } else {
+      localStorage.removeItem(TOKEN_KEY);
+      sessionStorage.removeItem(TOKEN_KEY);
+    }
+  } catch {}
+
+  // Luôn đồng bộ với Cookie bền vững 365 ngày cho iOS
+  setCookie(TOKEN_KEY, token, remember ? 365 : 1);
+}
+
 export function getStoredUser(): User | null {
-  const str = localStorage.getItem(USER_KEY) || sessionStorage.getItem(USER_KEY);
+  let str: string | null = null;
+  try {
+    str = localStorage.getItem(USER_KEY) || sessionStorage.getItem(USER_KEY);
+  } catch {}
+
+  // Fallback đọc từ Cookie trên iOS
+  if (!str) {
+    str = getCookie(USER_KEY);
+    if (str) {
+      try {
+        localStorage.setItem(USER_KEY, str);
+      } catch {}
+    }
+  }
+
   if (!str) return null;
   try {
     return JSON.parse(str);
@@ -226,19 +290,24 @@ export function getStoredUser(): User | null {
 }
 
 export function setStoredUser(user: User | null, remember = true): void {
-  if (user) {
-    const json = JSON.stringify(user);
-    if (remember) {
-      localStorage.setItem(USER_KEY, json);
-      sessionStorage.removeItem(USER_KEY);
+  const json = user ? JSON.stringify(user) : null;
+  try {
+    if (user && json) {
+      if (remember) {
+        localStorage.setItem(USER_KEY, json);
+        sessionStorage.removeItem(USER_KEY);
+      } else {
+        sessionStorage.setItem(USER_KEY, json);
+        localStorage.removeItem(USER_KEY);
+      }
     } else {
-      sessionStorage.setItem(USER_KEY, json);
       localStorage.removeItem(USER_KEY);
+      sessionStorage.removeItem(USER_KEY);
     }
-  } else {
-    localStorage.removeItem(USER_KEY);
-    sessionStorage.removeItem(USER_KEY);
-  }
+  } catch {}
+
+  // Đồng bộ Cookie bền vững 365 ngày cho iOS
+  setCookie(USER_KEY, json, remember ? 365 : 1);
 }
 
 export function getUserDisplayName(user?: User | null): string {
@@ -259,7 +328,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, options?: RequestInit, timeoutMs = 20000): Promise<T> {
+async function request<T>(path: string, options?: RequestInit, timeoutMs = 35000): Promise<T> {
   const token = getStoredToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',

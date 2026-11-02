@@ -2,7 +2,10 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   api,
   thisMonthRange,
+  getStoredUser,
   setStoredUser,
+  getStoredToken,
+  setStoredToken,
   getUserDisplayName,
   type Transaction,
   type FilterParams,
@@ -50,8 +53,9 @@ const NAV_TABS = [
 ] as const;
 
 export default function HomePage() {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [authChecking, setAuthChecking] = useState(true);
+  // Lấy ngay user từ bộ nhớ (LocalStorage + Cookie trên iOS) để mở app tức thì 0ms, không bị văng ra login
+  const [currentUser, setCurrentUser] = useState<User | null>(() => getStoredUser());
+  const [authChecking, setAuthChecking] = useState(() => !getStoredUser() && Boolean(getStoredToken()));
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [total, setTotal] = useState(0);
@@ -167,8 +171,14 @@ export default function HomePage() {
 
   const currentAnimalAvatar = getAnimalAvatar(currentUser?.avatar);
 
-  // Kiểm tra phiên đăng nhập hiện tại
+  // Kiểm tra phiên đăng nhập hiện tại ngầm (Silent Revalidation)
   useEffect(() => {
+    const token = getStoredToken();
+    if (!token) {
+      setAuthChecking(false);
+      return;
+    }
+
     api
       .getMe()
       .then(res => {
@@ -176,12 +186,13 @@ export default function HomePage() {
         setStoredUser(res.user);
       })
       .catch((err: any) => {
-        // Lỗi #7: Chỉ đá người dùng ra khi nhận mã 401 rõ ràng từ server.
-        // Các lỗi mạng, server ngủ (502, 504), timeout giữ nguyên người dùng đã lưu trong máy.
+        // Chỉ đá người dùng ra khi nhận mã 401 rõ ràng từ server (token hết hạn thật sự).
+        // Các lỗi mạng, server ngủ (502, 504), timeout (408) TUYỆT ĐỐI GIỮ NGUYÊN người dùng trong máy!
         if (err?.status === 401) {
           resetSession();
           setCurrentUser(null);
           setStoredUser(null);
+          setStoredToken(null);
         }
       })
       .finally(() => setAuthChecking(false));
@@ -190,6 +201,7 @@ export default function HomePage() {
       resetSession();
       setCurrentUser(null);
       setStoredUser(null);
+      setStoredToken(null);
     };
     window.addEventListener('auth_logout', onAuthLogout);
     return () => window.removeEventListener('auth_logout', onAuthLogout);

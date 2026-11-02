@@ -34,10 +34,73 @@ export const DANH_MUC = [
 ];
 
 /**
+ * Chuẩn hóa số bằng chữ thường gặp từ Web Speech API giọng nói tiếng Việt
+ * Ví dụ: "ăn trưa năm mươi nghìn" → "ăn trưa 50k", "uống cafe ba mươi lăm ngàn" → "uống cafe 35k"
+ */
+export function normalizeVietnameseSpokenNumbers(text: string): string {
+  if (!text) return '';
+  let res = text;
+
+  // Cụm hàng triệu
+  res = res.replace(/\b(nửa|1\/2)\s+triệu\b/giu, '500k');
+  res = res.replace(/\bmột\s+triệu\s+rưỡi\b/giu, '1.5tr');
+  res = res.replace(/\bhai\s+triệu\s+rưỡi\b/giu, '2.5tr');
+  res = res.replace(/\bba\s+triệu\s+rưỡi\b/giu, '3.5tr');
+  res = res.replace(/\b(một|hai|ba|bốn|năm|sáu|bảy|tám|chín|mười)\s+triệu\b/giu, (_, w) => {
+    const map: Record<string, string> = {
+      'một': '1tr', 'hai': '2tr', 'ba': '3tr', 'bốn': '4tr', 'năm': '5tr',
+      'sáu': '6tr', 'bảy': '7tr', 'tám': '8tr', 'chín': '9tr', 'mười': '10tr'
+    };
+    return map[w.toLowerCase()] || `${w}tr`;
+  });
+
+  // Cụm hàng trăm nghìn
+  res = res.replace(/\b(một|hai|ba|bốn|năm|sáu|bảy|tám|chín)\s+trăm\s+(?:nghìn|ngàn|k)?\s+rưỡi\b/giu, (_, w) => {
+    const map: Record<string, string> = {
+      'một': '150k', 'hai': '250k', 'ba': '350k', 'bốn': '450k', 'năm': '550k',
+      'sáu': '650k', 'bảy': '750k', 'tám': '850k', 'chín': '950k'
+    };
+    return map[w.toLowerCase()] || `${w}50k`;
+  });
+  res = res.replace(/\b(một|hai|ba|bốn|năm|sáu|bảy|tám|chín)\s+trăm\s*(?:nghìn|ngàn|k|đồng|vnd)?\b/giu, (_, w) => {
+    const map: Record<string, string> = {
+      'một': '100k', 'hai': '200k', 'ba': '300k', 'bốn': '400k', 'năm': '500k',
+      'sáu': '600k', 'bảy': '700k', 'tám': '800k', 'chín': '900k'
+    };
+    return map[w.toLowerCase()] || `${w}00k`;
+  });
+
+  // Cụm hàng chục nghìn kết hợp số lẻ (mười lăm nghìn, hai mươi lăm nghìn, ba mươi lăm ngàn...)
+  res = res.replace(/\b(mười|hai mươi|ba mươi|bốn mươi|năm mươi|sáu mươi|bảy mươi|tám mươi|chín mươi)\s+(lăm|nhăm|mốt|hai|ba|bốn|sáu|bảy|tám|chín)\s*(?:nghìn|ngàn|k|đồng|vnd)?\b/giu, (_, tens, ones) => {
+    const tensMap: Record<string, number> = {
+      'mười': 10, 'hai mươi': 20, 'ba mươi': 30, 'bốn mươi': 40, 'năm mươi': 50,
+      'sáu mươi': 60, 'bảy mươi': 70, 'tám mươi': 80, 'chín mươi': 90
+    };
+    const onesMap: Record<string, number> = {
+      'mốt': 1, 'hai': 2, 'ba': 3, 'bốn': 4, 'lăm': 5, 'nhăm': 5, 'sáu': 6, 'bảy': 7, 'tám': 8, 'chín': 9
+    };
+    const tVal = tensMap[tens.toLowerCase()] || 0;
+    const oVal = onesMap[ones.toLowerCase()] || 0;
+    return `${tVal + oVal}k`;
+  });
+
+  // Cụm hàng chục nghìn chẵn (mười nghìn, hai mươi nghìn, năm mươi nghìn...)
+  res = res.replace(/\b(mười|hai mươi|ba mươi|bốn mươi|năm mươi|sáu mươi|bảy mươi|tám mươi|chín mươi)\s*(?:nghìn|ngàn|k|đồng|vnd)\b/giu, (_, tens) => {
+    const tensMap: Record<string, string> = {
+      'mười': '10k', 'hai mươi': '20k', 'ba mươi': '30k', 'bốn mươi': '40k', 'năm mươi': '50k',
+      'sáu mươi': '60k', 'bảy mươi': '70k', 'tám mươi': '80k', 'chín mươi': '90k'
+    };
+    return tensMap[tens.toLowerCase()] || tens;
+  });
+
+  return res;
+}
+
+/**
  * Hàm chính: parse một dòng văn bản tự nhiên
  */
 export function parseSmartInput(text: string): SmartParseResult {
-  let remaining = text.trim();
+  let remaining = normalizeVietnameseSpokenNumbers(text || '').trim();
 
   // Bước 1: Tách ghi chú từ (ngoặc đơn)
   const noteMatch = remaining.match(/\(([^)]+)\)/);
@@ -755,7 +818,8 @@ export function parseMultiSmartInput(
   defaultDate: string = localTodayISO(),
   defaultType?: 'expense' | 'income'
 ): ParsedTransactionItem[] {
-  const trimmed = rawText.trim();
+  const normalized = normalizeVietnameseSpokenNumbers(rawText || '');
+  const trimmed = normalized.trim();
   if (!trimmed) return [];
 
   // 1. Bảo vệ dấu phẩy và chấm phẩy nằm bên trong dấu ngoặc (ví dụ: (trong đó 50k mời Hoàng, 10k tip))
