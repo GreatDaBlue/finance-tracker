@@ -372,6 +372,33 @@ async function parseNaturalQuery(query: string): Promise<QueryResult> {
   }
 
   if (!result.dateFrom) {
+    const quarterRx = /(?<![\p{L}\p{N}])quý\s+([1-4])(?:\s+năm\s+(\d{4}))?(?![\p{L}\p{N}])/iu;
+    const quarterMatch = text.match(quarterRx);
+    if (quarterMatch) {
+      const q = parseInt(quarterMatch[1], 10);
+      const yr = quarterMatch[2] ? parseInt(quarterMatch[2], 10) : y;
+      const startM = (q - 1) * 3;
+      result.dateFrom = formatDate(new Date(yr, startM, 1));
+      result.dateTo = formatDate(new Date(yr, startM + 3, 0));
+      textWithoutDates = textWithoutDates.replace(quarterRx, ' ');
+    } else if (/(?<![\p{L}\p{N}])quý này(?![\p{L}\p{N}])/iu.test(text)) {
+      const curQ = Math.floor(m / 3) + 1;
+      const startM = (curQ - 1) * 3;
+      result.dateFrom = formatDate(new Date(y, startM, 1));
+      result.dateTo = formatDate(today);
+      textWithoutDates = textWithoutDates.replace(/(?<![\p{L}\p{N}])quý này(?![\p{L}\p{N}])/iu, ' ');
+    } else if (/(?<![\p{L}\p{N}])quý trước(?![\p{L}\p{N}])/iu.test(text)) {
+      const curQ = Math.floor(m / 3) + 1;
+      const prevQ = curQ === 1 ? 4 : curQ - 1;
+      const prevYr = curQ === 1 ? y - 1 : y;
+      const startM = (prevQ - 1) * 3;
+      result.dateFrom = formatDate(new Date(prevYr, startM, 1));
+      result.dateTo = formatDate(new Date(prevYr, startM + 3, 0));
+      textWithoutDates = textWithoutDates.replace(/(?<![\p{L}\p{N}])quý trước(?![\p{L}\p{N}])/iu, ' ');
+    }
+  }
+
+  if (!result.dateFrom) {
     const yearRx = /(?<![\p{L}\p{N}])năm\s+(\d{4})(?![\p{L}\p{N}])/iu;
     const yearMatch = text.match(yearRx);
     if (yearMatch) {

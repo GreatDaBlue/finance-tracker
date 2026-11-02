@@ -54,8 +54,23 @@ export default function FilterBar({ filters, onFiltersChange }: Props) {
   const [parseResult, setParseResult] = useState('');
   const [showCatMenu, setShowCatMenu] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [lastClickedQuick, setLastClickedQuick] = useState<QuickKey>(null);
   const catRef = useRef<HTMLDivElement>(null);
-  const activeQuick = detectActiveQuick(filters);
+
+  const detectedQuick = detectActiveQuick(filters);
+  const activeQuick = (() => {
+    // Nếu cả month và quarter đều khớp date range (khi đang ở tháng đầu quý: 1, 4, 7, 10):
+    if (detectedQuick === 'month' && lastClickedQuick === 'quarter') {
+      const today = homNay();
+      const m = new Date().getMonth() + 1;
+      const qStartMonth = Math.floor((m - 1) / 3) * 3 + 1;
+      const firstOfQuarter = `${new Date().getFullYear()}-${String(qStartMonth).padStart(2, '0')}-01`;
+      if (filters.dateFrom === firstOfQuarter && filters.dateTo === today) {
+        return 'quarter';
+      }
+    }
+    return detectedQuick;
+  })();
 
   // Đóng dropdown danh mục khi click ra ngoài
   useEffect(() => {
@@ -141,6 +156,7 @@ export default function FilterBar({ filters, onFiltersChange }: Props) {
   }
 
   function quickFilter(key: QuickKey) {
+    setLastClickedQuick(key);
     const today = homNay();
     const y = new Date().getFullYear();
     const m = new Date().getMonth() + 1;

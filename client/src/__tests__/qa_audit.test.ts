@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { parseMultiSmartInput, parseAmountInput, formatAmountDisplay, parseBatchTransactions, parseSmartInput, getCategoryIcon, guessCategoryAndType } from '../lib/smartParser';
 import { formatVND } from '../lib/api';
+import { getTimePeriodLabel } from '../components/Dashboard';
 
 describe('QA Test Suite — Logic & Dữ liệu Biên (Calculations & Edge Cases)', () => {
 
@@ -305,6 +306,80 @@ khóa   155.000
         type: 'expense',
         amount: 25000
       });
+    });
+  });
+
+  describe('8. Rà soát Logic chu kỳ thời gian (Time Period Labels & Quarter vs Month)', () => {
+    const curYear = new Date().getFullYear();
+
+    it('Xử lý chính xác Tháng 10: Phải hiển thị "Tháng 10", TUYỆT ĐỐI KHÔNG ĐƯỢC nhầm thành "Quý 4"', () => {
+      // Khi chọn Tháng 10 qua dropdown
+      const labelDropdown = getTimePeriodLabel(
+        { dateFrom: `${curYear}-10-01`, dateTo: `${curYear}-10-31` },
+        'specific_month',
+        `${curYear}-10`
+      );
+      expect(labelDropdown).toBe('Tháng 10');
+
+      // Khi chỉ dựa vào filters dải ngày
+      const labelDateRange = getTimePeriodLabel({
+        dateFrom: `${curYear}-10-01`,
+        dateTo: `${curYear}-10-31`
+      });
+      // Nếu tháng hiện tại là tháng 10 thì là 'Tháng này', nếu không thì phải là 'Tháng 10', không được là 'Quý 4'
+      const curMonth = new Date().getMonth() + 1;
+      const expectedLabel = curMonth === 10 ? 'Tháng này' : 'Tháng 10';
+      expect(labelDateRange).toBe(expectedLabel);
+      expect(labelDateRange).not.toContain('Quý');
+    });
+
+    it('Không bị nhận nhầm các tháng đầu quý khác (Tháng 1, 4, 7) thành Quý 1, Quý 2, Quý 3', () => {
+      const curMonth = new Date().getMonth() + 1;
+      const monthsToCheck = [
+        { m: 1, end: '01-31', qName: 'Quý 1', expected: curMonth === 1 ? 'Tháng này' : 'Tháng 1' },
+        { m: 4, end: '04-30', qName: 'Quý 2', expected: curMonth === 4 ? 'Tháng này' : 'Tháng 4' },
+        { m: 7, end: '07-31', qName: 'Quý 3', expected: curMonth === 7 ? 'Tháng này' : 'Tháng 7' },
+      ];
+
+      for (const item of monthsToCheck) {
+        const start = `${curYear}-${String(item.m).padStart(2, '0')}-01`;
+        const end = `${curYear}-${item.end}`;
+        const label = getTimePeriodLabel({ dateFrom: start, dateTo: end });
+        expect(label).toBe(item.expected);
+        expect(label).not.toContain('Quý');
+      }
+    });
+
+    it('Nhận diện chính xác Quý 1, 2, 3, 4 khi khoảng ngày trọn vẹn đủ 3 tháng của quý', () => {
+      expect(getTimePeriodLabel({ dateFrom: `${curYear}-01-01`, dateTo: `${curYear}-03-31` })).toBe('Quý 1');
+      expect(getTimePeriodLabel({ dateFrom: `${curYear}-04-01`, dateTo: `${curYear}-06-30` })).toBe('Quý 2');
+      expect(getTimePeriodLabel({ dateFrom: `${curYear}-07-01`, dateTo: `${curYear}-09-30` })).toBe('Quý 3');
+      expect(getTimePeriodLabel({ dateFrom: `${curYear}-10-01`, dateTo: `${curYear}-12-31` })).toBe('Quý 4');
+    });
+
+    it('Nhận diện đúng khi người dùng chọn nút Quý này, Năm nay, Hôm nay, Tháng này từ quickPeriod', () => {
+      const curMonth = new Date().getMonth() + 1;
+      const curQuarter = Math.floor((curMonth - 1) / 3) + 1;
+
+      expect(getTimePeriodLabel({ dateFrom: '2026-10-01', dateTo: '2026-10-31' }, 'today')).toBe('Hôm nay');
+      expect(getTimePeriodLabel({ dateFrom: '2026-10-01', dateTo: '2026-10-31' }, 'month')).toBe('Tháng này');
+      expect(getTimePeriodLabel({ dateFrom: '2026-10-01', dateTo: '2026-10-31' }, 'quarter')).toBe(`Quý ${curQuarter}`);
+      expect(getTimePeriodLabel({ dateFrom: '2026-10-01', dateTo: '2026-10-31' }, 'year')).toBe('Năm nay');
+    });
+
+    it('Hiển thị rõ năm khi chọn xem một tháng của năm trước (ví dụ Tháng 10/2025)', () => {
+      const labelPrevYear = getTimePeriodLabel(
+        { dateFrom: '2025-10-01', dateTo: '2025-10-31' },
+        'specific_month',
+        '2025-10'
+      );
+      expect(labelPrevYear).toBe('Tháng 10/2025');
+
+      const labelPrevYearRange = getTimePeriodLabel({
+        dateFrom: '2025-10-01',
+        dateTo: '2025-10-31'
+      });
+      expect(labelPrevYearRange).toBe('Tháng 10/2025');
     });
   });
 });

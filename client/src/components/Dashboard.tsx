@@ -155,13 +155,35 @@ function getSavingsTier(rate: number, name = 'bạn', hasData = true): SavingsTi
   };
 }
 
-function getTimePeriodLabel(filters: FilterParams): string {
-  const { dateFrom, dateTo } = filters;
-  if (!dateFrom && !dateTo) return 'Tất cả';
-
+export function getTimePeriodLabel(
+  filters: FilterParams,
+  quickPeriod?: DashboardQuickKey,
+  selectedMonth?: string
+): string {
   const now = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
-  const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const curYear = now.getFullYear();
+  const curMonth = now.getMonth() + 1;
+  const todayStr = `${curYear}-${pad(curMonth)}-${pad(now.getDate())}`;
+
+  // 1. Ưu tiên cao nhất: Dựa trên quickPeriod được chọn trực tiếp từ Dashboard
+  if (quickPeriod === 'today') return 'Hôm nay';
+  if (quickPeriod === 'month') return 'Tháng này';
+  if (quickPeriod === 'quarter') {
+    const curQuarter = Math.floor((curMonth - 1) / 3) + 1;
+    return `Quý ${curQuarter}`;
+  }
+  if (quickPeriod === 'year') return 'Năm nay';
+  if (quickPeriod === 'specific_month' && selectedMonth) {
+    const [sY, sM] = selectedMonth.split('-').map(Number);
+    if (sY && sM) {
+      return sY === curYear ? `Tháng ${sM}` : `Tháng ${sM}/${sY}`;
+    }
+  }
+
+  // 2. Fallback dựa trên dateFrom và dateTo trong filters
+  const { dateFrom, dateTo } = filters;
+  if (!dateFrom && !dateTo) return 'Tất cả';
 
   const yesterday = new Date(now);
   yesterday.setDate(yesterday.getDate() - 1);
@@ -177,11 +199,6 @@ function getTimePeriodLabel(filters: FilterParams): string {
     }
   }
 
-  const curYear = now.getFullYear();
-  const curMonth = now.getMonth() + 1;
-  const firstOfCurMonth = `${curYear}-${pad(curMonth)}-01`;
-  const firstOfCurYear = `${curYear}-01-01`;
-
   // Kiểm tra Tuần này (từ Thứ 2 đến Chủ nhật hoặc hôm nay)
   const dayOfWeek = now.getDay() === 0 ? 6 : now.getDay() - 1; // 0 = Thứ 2, 6 = Chủ nhật
   const monday = new Date(now);
@@ -195,38 +212,104 @@ function getTimePeriodLabel(filters: FilterParams): string {
     return 'Tuần này';
   }
 
-  // Kiểm tra Tháng này (từ ngày 01 đến hôm nay hoặc hết tháng)
-  if (dateFrom === firstOfCurMonth && (dateTo === todayStr || dateTo?.startsWith(`${curYear}-${pad(curMonth)}`))) {
-    return 'Tháng này';
-  }
-
-  // Kiểm tra Quý này (từ ngày 01 của quý đến hôm nay)
-  const curQuarter = Math.floor((curMonth - 1) / 3) + 1;
-  const qStartMonth = (curQuarter - 1) * 3 + 1;
-  const firstOfCurQuarter = `${curYear}-${pad(qStartMonth)}-01`;
-  if (dateFrom === firstOfCurQuarter && (dateTo === todayStr || dateTo?.startsWith(`${curYear}-`))) {
-    return `Quý ${curQuarter}`;
-  }
-
-  // Kiểm tra Năm nay
-  if (dateFrom === firstOfCurYear && (dateTo === todayStr || dateTo === `${curYear}-12-31`)) {
-    return 'Năm nay';
-  }
-
-  // Kiểm tra một tháng cụ thể (ví dụ 2026-09-01 đến 2026-09-30)
+  // QUAN TRỌNG: Kiểm tra một tháng cụ thể (từ ngày 01 đến ngày cuối cùng của tháng) TRƯỚC Quý và Năm
   if (dateFrom && dateTo) {
     const fromParts = dateFrom.split('-').map(Number);
     const toParts = dateTo.split('-').map(Number);
-    if (fromParts.length === 3 && toParts.length === 3 && fromParts[0] === toParts[0] && fromParts[1] === toParts[1] && fromParts[2] === 1) {
+    if (
+      fromParts.length === 3 &&
+      toParts.length === 3 &&
+      fromParts[0] === toParts[0] &&
+      fromParts[1] === toParts[1] &&
+      fromParts[2] === 1
+    ) {
       const lastDayOfMonth = new Date(fromParts[0], fromParts[1], 0).getDate();
       if (toParts[2] === lastDayOfMonth) {
-        return fromParts[0] === curYear ? `Tháng ${fromParts[1]}` : `T${fromParts[1]}/${fromParts[0]}`;
+        if (fromParts[0] === curYear) {
+          return fromParts[1] === curMonth ? 'Tháng này' : `Tháng ${fromParts[1]}`;
+        }
+        return `Tháng ${fromParts[1]}/${fromParts[0]}`;
       }
     }
+  }
 
-    // Khoảng ngày: dd/MM - dd/MM
+  // Kiểm tra Tháng này đang diễn ra (từ ngày 01 đến hôm nay)
+  const firstOfCurMonth = `${curYear}-${pad(curMonth)}-01`;
+  if (dateFrom === firstOfCurMonth && dateTo === todayStr) {
+    return 'Tháng này';
+  }
+
+  // Kiểm tra Quý:
+  // Định nghĩa các Quý tròn trong năm:
+  // Q1: 01-01 -> 03-31
+  // Q2: 04-01 -> 06-30
+  // Q3: 07-01 -> 09-30
+  // Q4: 10-01 -> 12-31
+  const curQuarter = Math.floor((curMonth - 1) / 3) + 1;
+  const qStartMonth = (curQuarter - 1) * 3 + 1;
+  const firstOfCurQuarter = `${curYear}-${pad(qStartMonth)}-01`;
+
+  // Quý này đang diễn ra (từ ngày đầu quý đến hôm nay)
+  if (dateFrom === firstOfCurQuarter && dateTo === todayStr) {
+    return `Quý ${curQuarter}`;
+  }
+
+  // Quý tròn 3 tháng hoàn chỉnh (bất kể năm nào)
+  if (dateFrom && dateTo) {
+    const fromParts = dateFrom.split('-').map(Number);
+    const toParts = dateTo.split('-').map(Number);
+    if (fromParts.length === 3 && toParts.length === 3 && fromParts[0] === toParts[0] && fromParts[2] === 1) {
+      const fYear = fromParts[0];
+      const fMonth = fromParts[1];
+      const tMonth = toParts[1];
+      const tDay = toParts[2];
+
+      const quartersDef = [
+        { q: 1, startM: 1, endM: 3, endD: 31 },
+        { q: 2, startM: 4, endM: 6, endD: 30 },
+        { q: 3, startM: 7, endM: 9, endD: 30 },
+        { q: 4, startM: 10, endM: 12, endD: 31 },
+      ];
+      for (const qd of quartersDef) {
+        if (fMonth === qd.startM && tMonth === qd.endM && tDay === qd.endD) {
+          return fYear === curYear ? `Quý ${qd.q}` : `Quý ${qd.q}/${fYear}`;
+        }
+      }
+    }
+  }
+
+  // Kiểm tra Năm tròn (01-01 -> 12-31)
+  if (dateFrom && dateTo) {
+    const fromParts = dateFrom.split('-').map(Number);
+    const toParts = dateTo.split('-').map(Number);
+    if (
+      fromParts.length === 3 &&
+      toParts.length === 3 &&
+      fromParts[0] === toParts[0] &&
+      fromParts[1] === 1 &&
+      fromParts[2] === 1 &&
+      toParts[1] === 12 &&
+      toParts[2] === 31
+    ) {
+      return fromParts[0] === curYear ? 'Năm nay' : `Năm ${fromParts[0]}`;
+    }
+  }
+
+  // Năm nay đang diễn ra (01-01 đến hôm nay)
+  const firstOfCurYear = `${curYear}-01-01`;
+  if (dateFrom === firstOfCurYear && dateTo === todayStr) {
+    return 'Năm nay';
+  }
+
+  // Khoảng ngày tùy chọn: dd/MM - dd/MM
+  if (dateFrom && dateTo) {
+    const fromParts = dateFrom.split('-').map(Number);
+    const toParts = dateTo.split('-').map(Number);
     if (fromParts.length === 3 && toParts.length === 3) {
-      return `${pad(fromParts[2])}/${pad(fromParts[1])} - ${pad(toParts[2])}/${pad(toParts[1])}`;
+      if (fromParts[0] === toParts[0] && fromParts[0] === curYear) {
+        return `${pad(fromParts[2])}/${pad(fromParts[1])} - ${pad(toParts[2])}/${pad(toParts[1])}`;
+      }
+      return `${pad(fromParts[2])}/${pad(fromParts[1])}/${fromParts[0]} - ${pad(toParts[2])}/${pad(toParts[1])}/${toParts[0]}`;
     }
   }
 
@@ -443,7 +526,7 @@ export default function Dashboard({ filters, user, onSwitchTab, refreshKey }: Pr
       : (summary && summary.totalExpense > 0 ? -100 : 0)
   );
   const savingsTier = getSavingsTier(savingsRate, userName, hasData);
-  const timePeriodLabel = getTimePeriodLabel(activePeriodRange);
+  const timePeriodLabel = getTimePeriodLabel(activePeriodRange, quickPeriod, selectedMonth);
 
   return (
     <div className="space-y-4">
