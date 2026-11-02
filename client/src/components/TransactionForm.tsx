@@ -29,6 +29,7 @@ export default function TransactionForm({ onCreated, user }: Props) {
   const [type, setType]                           = useState<'expense' | 'income' | 'debt_lend' | 'debt_borrow'>('expense');
   const [person, setPerson]                       = useState('');
   const [userOverrodeType, setUserOverrodeType]   = useState(false);
+  const [userOverrodeCategory, setUserOverrodeCategory] = useState(false);
   const [amount, setAmount]                       = useState('');
   const [description, setDescription]             = useState('');
   const [note, setNote]                           = useState('');
@@ -158,6 +159,7 @@ export default function TransactionForm({ onCreated, user }: Props) {
         setNote('');
         setPerson('');
         setCategory('');
+        setUserOverrodeCategory(false);
         setDate(todayISO());
         if (!userOverrodeType) setType('expense');
       }
@@ -181,7 +183,7 @@ export default function TransactionForm({ onCreated, user }: Props) {
         setPerson(item.person || '');
         setCategory('Sổ nợ');
       } else {
-        if (!category || category === 'Sổ nợ') {
+        if (!userOverrodeCategory && category !== 'Sổ nợ') {
           setCategory(item.category);
         }
       }
@@ -201,7 +203,7 @@ export default function TransactionForm({ onCreated, user }: Props) {
         try {
           const p = await api.classifyPreview(descForServer, activeType);
           if (reqId1 !== classifyReqId.current) return;
-          if (p?.category && (!category || category === 'Sổ nợ')) {
+          if (p?.category && !userOverrodeCategory && category !== 'Sổ nợ') {
             setCategory(p.category);
           }
         } catch {
@@ -229,7 +231,7 @@ export default function TransactionForm({ onCreated, user }: Props) {
       if (clientDate.date) {
         setDate(clientDate.date);
       }
-      if (!category || category === 'Sổ nợ') {
+      if (!userOverrodeCategory && category !== 'Sổ nợ') {
         setCategory(guessed.category);
       }
       setDescription(cleanDescriptionText(clientDate.cleanText || parsed.description || smartText.trim()));
@@ -249,7 +251,9 @@ export default function TransactionForm({ onCreated, user }: Props) {
           if (reqId2 !== classifyReqId.current) return;
           setPreview(p);
           if (p.suggestedDate) setDate(p.suggestedDate);
-          setCategory(p.category || guessed.category);
+          if (!userOverrodeCategory && category !== 'Sổ nợ') {
+            setCategory(p.category || guessed.category);
+          }
           setDescription(cleanDescriptionText(p.cleanDescription || parsed.description));
         } catch {
           if (reqId2 !== classifyReqId.current) return;
@@ -265,7 +269,7 @@ export default function TransactionForm({ onCreated, user }: Props) {
     }
 
     return () => clearTimeout(previewTimer.current);
-  }, [smartText, userOverrodeType, type]);
+  }, [smartText, userOverrodeType, type, userOverrodeCategory]);
 
   // ── Thao tác trên danh sách nhiều giao dịch ──────────────────────────────
   function removeItem(index: number) {
@@ -423,6 +427,7 @@ export default function TransactionForm({ onCreated, user }: Props) {
         setNote('');
         setPerson('');
         setCategory('');
+        setUserOverrodeCategory(false);
         setPreview(null);
         setDate(todayISO());
         setUserOverrodeType(false);
@@ -452,7 +457,7 @@ export default function TransactionForm({ onCreated, user }: Props) {
       finalNote = item.note;
       finalType = userOverrodeType ? type : item.type;
       finalDate = item.date;
-      finalCat = category || item.category;
+      finalCat = userOverrodeCategory && category ? category : (item.category || category);
     } else if ((!finalAmount || !finalDesc) && smartText.trim()) {
       const parsed = parseSmartInput(smartText);
       if (parsed.amount) finalAmount = parsed.amount;
@@ -461,10 +466,17 @@ export default function TransactionForm({ onCreated, user }: Props) {
 
       const guessed = guessCategoryAndType(parsed.description || smartText);
       if (!userOverrodeType) finalType = guessed.type;
-      if (!finalCat) finalCat = guessed.category;
+      if (!userOverrodeCategory || !finalCat || finalCat === 'Khác') finalCat = guessed.category;
 
       const clientDate = parseDateFromVietnameseText(parsed.description || smartText);
       if (clientDate.date) finalDate = clientDate.date;
+    }
+
+    if (!userOverrodeCategory && (!finalCat || finalCat === 'Khác') && finalDesc) {
+      const autoGuessed = guessCategoryAndType(finalDesc);
+      if (autoGuessed.category && autoGuessed.category !== 'Khác') {
+        finalCat = autoGuessed.category;
+      }
     }
 
     // Kiểm tra nếu là Nợ (Cho vay hoặc Đi vay)
@@ -508,6 +520,7 @@ export default function TransactionForm({ onCreated, user }: Props) {
         setNote('');
         setPerson('');
         setCategory('');
+        setUserOverrodeCategory(false);
         setPreview(null);
         setDate(todayISO());
         setUserOverrodeType(false);
@@ -574,6 +587,7 @@ export default function TransactionForm({ onCreated, user }: Props) {
       setNote('');
       setPerson('');
       setCategory('');
+      setUserOverrodeCategory(false);
       setIsRecurring(false);
       setPreview(null);
       setDate(todayISO());
@@ -739,6 +753,9 @@ export default function TransactionForm({ onCreated, user }: Props) {
                     setDescription('');
                     setNote('');
                     setPerson('');
+                    setCategory('');
+                    setUserOverrodeCategory(false);
+                    setUserOverrodeType(false);
                     setPreview(null);
                   }}
                   className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-700 transition-colors"
@@ -1090,7 +1107,10 @@ export default function TransactionForm({ onCreated, user }: Props) {
                     <label className="block text-xs font-medium text-slate-500 mb-1">Danh mục</label>
                     <select
                       value={category}
-                      onChange={e => setCategory(e.target.value)}
+                      onChange={e => {
+                        setCategory(e.target.value);
+                        setUserOverrodeCategory(Boolean(e.target.value));
+                      }}
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="">{category ? `${category} (tự động)` : 'Tự động phân loại'}</option>

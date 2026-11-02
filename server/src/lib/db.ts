@@ -505,6 +505,13 @@ async function initSqliteTables(): Promise<void> {
   } catch {
     // Đã tồn tại
   }
+
+  try {
+    // Đồng bộ và chuẩn hóa tên danh mục cũ 'Thực phẩm & Ăn uống' thành 'Ăn uống' trong bảng transactions
+    await db.exec("UPDATE transactions SET category = 'Ăn uống' WHERE category = 'Thực phẩm & Ăn uống';");
+  } catch {
+    // Bỏ qua nếu có lỗi
+  }
 }
 
 // ── Seed 10 danh mục mặc định ─────────────────────────────────────────────
@@ -516,11 +523,12 @@ async function seedDanhMuc(): Promise<void> {
     {
       name: 'Thực phẩm & Ăn uống', type: 'expense', icon: '🍔',
       keywords: [
-        'ăn','cơm','phở','bún','bánh','thịt','rau','cá','tôm','trứng',
-        'cafe','coffee','trà','nước','sinh tố','kem','bim bim','snack',
+        'ăn','ăn sáng','ăn trưa','ăn tối','ăn đêm','ăn vặt','bữa sáng','bữa trưa','bữa tối','điểm tâm',
+        'cơm','phở','bún','bánh','mì','miến','cháo','xôi','thịt','rau','cá','tôm','trứng',
+        'cafe','cà phê','coffee','trà','trà sữa','nước','sinh tố','kem','bim bim','snack',
         'siêu thị','chợ','winmart','coopmart','bigc','lotte','mm mega',
         'grab food','baemin','shopeefood','now','gofood',
-        'nhà hàng','quán','buffet','lẩu','nướng','hải sản',
+        'nhà hàng','quán','buffet','lẩu','nướng','hải sản','nhậu',
         'highlands','starbucks','the coffee house','phúc long',
         'pizza','burger','kfc','mcdonalds','lotteria','jollibee'
       ]

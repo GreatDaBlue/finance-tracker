@@ -47,7 +47,9 @@ export async function classify(description: string, type: 'income' | 'expense'):
   }
 
   // Ưu tiên các từ khóa thông dụng theo yêu cầu chuẩn:
-  if (/(?:^|[^\p{L}\p{N}])(cơm|phở|trà sữa|cafe|cà phê|ăn|uống|bún|bánh|mì|cháo|thịt|cá|rau|lẩu|nướng|buffet|chợ|siêu thị)(?:[^\p{L}\p{N}]|$)/iu.test(description)) {
+  if (
+    /(?:^|[^\p{L}\p{N}])(ăn\s*sáng|ăn\s*trưa|ăn\s*tối|ăn\s*đêm|ăn\s*vặt|bữa\s*sáng|bữa\s*trưa|bữa\s*tối|điểm\s*tâm|điểm\s*tâm\s*sáng|đồ\s*ăn|thức\s*ăn|đồ\s*uống|nước\s*uống|uống\s*nước|uống\s*bia|uống\s*cafe|uống\s*cà\s*phê|cơm|phở|trà\s*sữa|cafe|cà\s*phê|coffee|ăn|uống|bún|bánh|mì|miến|cháo|xôi|thịt|cá|rau|lẩu|nướng|buffet|nhậu|chợ|siêu\s*thị|hoa\s*quả|trái\s*cây|sinh\s*tố|nước\s*ép|thực\s*phẩm|an\s*sang|an\s*trua|an\s*toi|bua\s*sang|bua\s*trua|bua\s*toi|banh\s*mi|do\s*an)(?:[^\p{L}\p{N}]|$)/iu.test(description)
+  ) {
     return 'Ăn uống';
   }
   if (/(?:^|[^\p{L}\p{N}])(xăng|xe|gửi xe|đổ xăng|bãi xe|đậu xe|rửa xe|sửa xe|thay nhớt|grab|taxi|bus)(?:[^\p{L}\p{N}]|$)/iu.test(description)) {
@@ -66,7 +68,7 @@ export async function classify(description: string, type: 'income' | 'expense'):
   for (const cat of [...cuungLoai, ...khacLoai]) {
     for (const kw of cat.keywords) {
       if (text.includes(chuanHoaVanBan(kw))) {
-        return cat.name;
+        return getCanonicalCategory(cat.name);
       }
     }
   }

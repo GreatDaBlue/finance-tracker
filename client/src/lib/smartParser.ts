@@ -582,8 +582,8 @@ export function guessCategoryAndType(text: string): { type: 'income' | 'expense'
   }
 
   // 3. Nhận diện chi tiêu theo từ khóa:
-  // Ăn uống: cơm, phở, trà sữa, cafe, ăn, uống, bún, bánh...
-  if (matchViWords(lower, 'ăn|uống|cơm|phở|bún|bánh|mì|miến|cháo|thịt|rau|cá|cafe|cà phê|coffee|trà|trà sữa|nước|sinh tố|siêu thị|chợ|buffet|quán|lẩu|nướng|nhậu|trưa|tối|sáng|bữa|hoa quả|trái cây|mít|sầu riêng|cam|táo|ổi|dưa|chuối|xoài|thực phẩm')) {
+  // Ăn uống: ăn sáng, ăn trưa, ăn tối, cơm, phở, bún, bánh mì, trà sữa, cafe, ăn, uống...
+  if (matchViWords(lower, 'ăn\\s*sáng|ăn\\s*trưa|ăn\\s*tối|ăn\\s*đêm|ăn\\s*vặt|bữa\\s*sáng|bữa\\s*trưa|bữa\\s*tối|điểm\\s*tâm|điểm\\s*tâm\\s*sáng|đồ\\s*ăn|thức\\s*ăn|đồ\\s*uống|nước\\s*uống|uống\\s*nước|uống\\s*bia|uống\\s*cafe|uống\\s*cà\\s*phê|uống\\s*trà|an\\s*sang|an\\s*trua|an\\s*toi|an\\s*vat|bua\\s*sang|bua\\s*trua|bua\\s*toi|diem\\s*tam|do\\s*an|thuc\\s*an|ăn|uống|cơm|phở|bún|bánh|mì|miến|cháo|xôi|thịt|rau|cá|cafe|cà phê|coffee|trà|trà sữa|nước|sinh tố|siêu thị|chợ|buffet|quán|lẩu|nướng|nhậu|trưa|tối|sáng|bữa|hoa quả|trái cây|mít|sầu riêng|cam|táo|ổi|dưa|chuối|xoài|thực phẩm')) {
     return { type: 'expense', category: 'Ăn uống' };
   }
   // Xe cộ: xăng, xe, gửi xe, đổ xăng, rửa xe, grab, taxi...

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { parseMultiSmartInput, parseAmountInput, formatAmountDisplay, parseBatchTransactions, parseSmartInput, getCategoryIcon } from '../lib/smartParser';
+import { parseMultiSmartInput, parseAmountInput, formatAmountDisplay, parseBatchTransactions, parseSmartInput, getCategoryIcon, guessCategoryAndType } from '../lib/smartParser';
 import { formatVND } from '../lib/api';
 
 describe('QA Test Suite — Logic & Dữ liệu Biên (Calculations & Edge Cases)', () => {
@@ -256,6 +256,55 @@ khóa   155.000
         const parsed = parseSmartInput(c.text);
         expect(parsed.amount, `Câu nói "${c.text}" phải parse ra ${c.expectedAmount}`).toBe(c.expectedAmount);
       }
+    });
+  });
+
+  describe('7. Phân loại thông minh giao dịch "ăn sáng" và các biến thể vào danh mục Ăn uống', () => {
+    it('Nhận diện chính xác "ăn sáng" và các biến thể phổ biến vào danh mục Ăn uống', () => {
+      const foodCases = [
+        'ăn sáng',
+        'ăn sáng 30k',
+        'hôm nay ăn sáng 35k',
+        'sáng ăn phở 40k',
+        'ăn sáng nay 30k',
+        'bữa sáng 25k',
+        'bữa sáng',
+        'điểm tâm sáng 50k',
+        'ăn điểm tâm 35k',
+        'ăn sáng với bạn 50k',
+        'xôi sáng 15k',
+        'bánh mì ăn sáng 20k',
+        'an sang 30k',
+        'an sang',
+        'bua sang 30k'
+      ];
+
+      for (const phrase of foodCases) {
+        const guessed = guessCategoryAndType(phrase);
+        expect(guessed.category, `Cụm từ "${phrase}" phải được phân loại vào danh mục Ăn uống`).toBe('Ăn uống');
+        expect(guessed.type, `Cụm từ "${phrase}" phải là loại expense (chi tiêu)`).toBe('expense');
+      }
+    });
+
+    it('Bóc tách và gán đúng danh mục "Ăn uống" khi phân tích đa giao dịch chứa "ăn sáng"', () => {
+      const multiInput = 'hôm nay ăn sáng 30k, đổ xăng 50k, uống cafe 25k';
+      const items = parseMultiSmartInput(multiInput);
+      expect(items).toHaveLength(3);
+      expect(items[0]).toMatchObject({
+        category: 'Ăn uống',
+        type: 'expense',
+        amount: 30000
+      });
+      expect(items[1]).toMatchObject({
+        category: 'Xe cộ',
+        type: 'expense',
+        amount: 50000
+      });
+      expect(items[2]).toMatchObject({
+        category: 'Ăn uống',
+        type: 'expense',
+        amount: 25000
+      });
     });
   });
 });

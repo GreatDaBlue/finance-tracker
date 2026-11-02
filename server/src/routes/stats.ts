@@ -438,12 +438,12 @@ async function parseNaturalQuery(query: string): Promise<QueryResult> {
   }
 
   // Khớp chính xác các từ khóa thông dụng hàng ngày
-  if (/(?:^|[^\p{L}\p{N}])(cơm|phở|trà sữa|cafe|cà phê|bún|bánh|mì|cháo|lẩu|nướng)(?:[^\p{L}\p{N}]|$)/iu.test(text)) {
-    result.category = 'Thực phẩm & Ăn uống';
+  if (/(?:^|[^\p{L}\p{N}])(ăn\s*sáng|ăn\s*trưa|ăn\s*tối|ăn\s*đêm|ăn\s*vặt|bữa\s*sáng|bữa\s*trưa|bữa\s*tối|điểm\s*tâm|đồ\s*ăn|thức\s*ăn|đồ\s*uống|nước\s*uống|cơm|phở|trà\s*sữa|cafe|cà\s*phê|bún|bánh|mì|miến|cháo|xôi|lẩu|nướng|ăn|uống|sinh\s*tố|an\s*sang|an\s*trua|an\s*toi)(?:[^\p{L}\p{N}]|$)/iu.test(text)) {
+    result.category = 'Ăn uống';
   } else if (/(?:^|[^\p{L}\p{N}])(xăng|xe|gửi xe|đổ xăng|bãi xe|đậu xe|rửa xe|sửa xe|thay nhớt|grab|taxi|bus)(?:[^\p{L}\p{N}]|$)/iu.test(text)) {
-    result.category = 'Di chuyển & Xăng xe';
+    result.category = 'Xe cộ & Đi lại';
   } else if (/(?:^|[^\p{L}\p{N}])(gym|thuốc|mua thuốc|khám|bệnh viện|bác sĩ|nha khoa|răng|fitness|yoga|spa)(?:[^\p{L}\p{N}]|$)/iu.test(text)) {
-    result.category = 'Y tế & Sức khỏe';
+    result.category = 'Sức khỏe & Y tế';
   }
 
   if (!result.category) {
@@ -457,12 +457,12 @@ async function parseNaturalQuery(query: string): Promise<QueryResult> {
       const catNameNorm = cat.name.toLowerCase();
 
       if (text.includes(catNameNorm)) {
-        result.category = cat.name;
+        result.category = getCanonicalCategory(cat.name);
         break;
       }
       for (const kw of kws) {
         if (text.includes(kw.toLowerCase())) {
-          result.category = cat.name;
+          result.category = getCanonicalCategory(cat.name);
           break;
         }
       }
