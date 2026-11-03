@@ -344,6 +344,8 @@ async function initPostgresTables(): Promise<void> {
   } catch {
     // Đã tồn tại
   }
+
+  await normalizeAllDatabaseCategories();
 }
 
 // ── Bảng cho SQLite ───────────────────────────────────────────────────────
@@ -506,35 +508,93 @@ async function initSqliteTables(): Promise<void> {
     // Đã tồn tại
   }
 
+  await normalizeAllDatabaseCategories();
+}
+
+// ── Chuẩn hóa và gộp tất cả danh mục trùng lặp trong Database ──────────────
+async function normalizeAllDatabaseCategories(): Promise<void> {
   try {
-    // Đồng bộ và chuẩn hóa tên danh mục cũ 'Thực phẩm & Ăn uống' thành 'Ăn uống' trong bảng transactions
-    await db.exec("UPDATE transactions SET category = 'Ăn uống' WHERE category = 'Thực phẩm & Ăn uống';");
-  } catch {
-    // Bỏ qua nếu có lỗi
+    // 1. Chuẩn hóa trong bảng transactions (gộp mọi biến thể về danh mục chuẩn duy nhất)
+    await db.exec(`
+      UPDATE transactions SET category = 'Ăn uống' WHERE category IN ('Thực phẩm & Ăn uống', 'Th?c ph?m & An u?ng', 'Thực phẩm', 'Đồ ăn', 'Tiền ăn');
+      UPDATE transactions SET category = 'Ăn uống' WHERE category = 'Khác' AND (
+        description LIKE '%ăn sáng%' OR description LIKE '%Ăn sáng%' OR 
+        description LIKE '%ăn trưa%' OR description LIKE '%Ăn trưa%' OR 
+        description LIKE '%ăn tối%' OR description LIKE '%Ăn tối%' OR 
+        description LIKE '%bữa sáng%' OR description LIKE '%Bữa sáng%' OR
+        description LIKE '%cơm%' OR description LIKE '%Cơm%' OR
+        description LIKE '%phở%' OR description LIKE '%Phở%' OR
+        description LIKE '%bún%' OR description LIKE '%Bún%' OR
+        description LIKE '%cafe%' OR description LIKE '%Cafe%' OR
+        description LIKE '%cà phê%' OR description LIKE '%Cà phê%'
+      );
+      UPDATE transactions SET category = 'Xe cộ & Đi lại' WHERE category IN ('Xe cộ', 'Di chuyển & Xăng xe', 'Xăng xe', 'Di chuyển', 'Đi lại', 'Xăng');
+      UPDATE transactions SET category = 'Sức khỏe & Y tế' WHERE category IN ('Sức khỏe', 'Y tế & Sức khỏe', 'Y tế', 'Thuốc men');
+      UPDATE transactions SET category = 'Nhà cửa & Hóa đơn' WHERE category IN ('Nhà cửa', 'Nhà ở & Tiện ích', 'Nhà ở', 'Tiền nhà', 'Điện nước');
+      UPDATE transactions SET category = 'Mua sắm & Giải trí' WHERE category IN ('Giải trí & Mua sắm', 'Mua sắm', 'Giải trí', 'Mua sắm giải trí');
+      UPDATE transactions SET category = 'Giáo dục & Học tập' WHERE category IN ('Giáo dục', 'Học tập', 'Học phí', 'Sách vở');
+      UPDATE transactions SET category = 'Thu nhập lương' WHERE category IN ('Lương', 'Tiền lương', 'Thu nh?p luong');
+    `);
+
+    // 2. Chuẩn hóa trong bảng budgets (ngân sách chi tiêu)
+    await db.exec(`
+      UPDATE budgets SET category = 'Ăn uống' WHERE category IN ('Thực phẩm & Ăn uống', 'Th?c ph?m & An u?ng', 'Thực phẩm');
+      UPDATE budgets SET category = 'Xe cộ & Đi lại' WHERE category IN ('Xe cộ', 'Di chuyển & Xăng xe', 'Xăng xe');
+      UPDATE budgets SET category = 'Sức khỏe & Y tế' WHERE category IN ('Sức khỏe', 'Y tế & Sức khỏe', 'Y tế');
+      UPDATE budgets SET category = 'Nhà cửa & Hóa đơn' WHERE category IN ('Nhà cửa', 'Nhà ở & Tiện ích', 'Nhà ở');
+      UPDATE budgets SET category = 'Mua sắm & Giải trí' WHERE category IN ('Giải trí & Mua sắm', 'Mua sắm');
+      UPDATE budgets SET category = 'Giáo dục & Học tập' WHERE category IN ('Giáo dục', 'Học tập');
+    `);
+  } catch (err) {
+    console.warn('⚠️ Cảnh báo migration danh mục:', err);
   }
 }
 
-// ── Seed 10 danh mục mặc định ─────────────────────────────────────────────
+// ── Seed 13 danh mục chuẩn mặc định (Single Source of Truth) ─────────────
 async function seedDanhMuc(): Promise<void> {
   const row = await db.get<{ c: string | number }>('SELECT COUNT(*) as c FROM categories');
-  if (row && Number(row.c) > 0) return;
+  if (row && Number(row.c) >= 10) return;
 
   const danhMuc = [
     {
-      name: 'Thực phẩm & Ăn uống', type: 'expense', icon: '🍔',
+      name: 'Ăn uống', type: 'expense', icon: '🍜',
       keywords: [
         'ăn','ăn sáng','ăn trưa','ăn tối','ăn đêm','ăn vặt','bữa sáng','bữa trưa','bữa tối','điểm tâm',
-        'cơm','phở','bún','bánh','mì','miến','cháo','xôi','thịt','rau','cá','tôm','trứng',
-        'cafe','cà phê','coffee','trà','trà sữa','nước','sinh tố','kem','bim bim','snack',
+        'cơm','phở','bún','bánh','bánh mì','mì','miến','cháo','xôi','thịt','rau','cá','tôm','trứng',
+        'cafe','cà phê','coffee','trà','trà sữa','nước','nước ngọt','sinh tố','kem','bim bim','snack',
         'siêu thị','chợ','winmart','coopmart','bigc','lotte','mm mega',
         'grab food','baemin','shopeefood','now','gofood',
         'nhà hàng','quán','buffet','lẩu','nướng','hải sản','nhậu',
         'highlands','starbucks','the coffee house','phúc long',
-        'pizza','burger','kfc','mcdonalds','lotteria','jollibee'
+        'pizza','burger','kfc','mcdonalds','lotteria','jollibee',
+        'sữa','sữa tươi','sữa chua','sữa hạt','sữa gạo','bánh ngọt'
       ]
     },
     {
-      name: 'Nhà ở & Tiện ích', type: 'expense', icon: '🏠',
+      name: 'Xe cộ & Đi lại', type: 'expense', icon: '🛵',
+      keywords: [
+        'xăng','đổ xăng','nhiên liệu',
+        'grab','be','gojek','taxi','xe ôm','uber',
+        'bus','xe buýt','xe khách','tàu','metro','vé tàu','vé xe','vé máy bay',
+        'gửi xe','đậu xe','bãi xe','parking',
+        'sửa xe','đăng kiểm','bảo hiểm xe','phí đường','vé cầu đường',
+        'thuê xe','thuê ô tô','thuê xe máy','grab car','grabbike','rửa xe','thay nhớt'
+      ]
+    },
+    {
+      name: 'Sức khỏe & Y tế', type: 'expense', icon: '💊',
+      keywords: [
+        'thuốc','mua thuốc','nhà thuốc','pharmacy','long châu','pharmacity','guardian',
+        'bệnh viện','phòng khám','khám bệnh','bác sĩ','nha sĩ','nha khoa','răng',
+        'xét nghiệm','siêu âm','chụp x-quang','phẫu thuật',
+        'vitamin','thực phẩm chức năng','bổ sung',
+        'gym','thể dục','yoga','fitness','phòng tập','zumba',
+        'spa','massage','làm đẹp','tóc','cắt tóc','salon',
+        'bảo hiểm y tế','bhyt','khẩu trang','cồn y tế'
+      ]
+    },
+    {
+      name: 'Nhà cửa & Hóa đơn', type: 'expense', icon: '🏠',
       keywords: [
         'tiền nhà','thuê nhà','phòng trọ','chung cư','nhà ở',
         'điện','tiền điện','evn','hóa đơn điện',
@@ -546,43 +606,20 @@ async function seedDanhMuc(): Promise<void> {
       ]
     },
     {
-      name: 'Di chuyển & Xăng xe', type: 'expense', icon: '🚗',
+      name: 'Mua sắm & Giải trí', type: 'expense', icon: '🛍️',
       keywords: [
-        'xăng','đổ xăng','nhiên liệu',
-        'grab','be','gojek','taxi','xe ôm','uber',
-        'bus','xe buýt','xe khách','tàu','metro','vé tàu','vé xe','vé máy bay',
-        'gửi xe','đậu xe','bãi xe','parking',
-        'sửa xe','đăng kiểm','bảo hiểm xe','phí đường','vé cầu đường',
-        'thuê xe','thuê ô tô','thuê xe máy','grab car','grabbike'
-      ]
-    },
-    {
-      name: 'Y tế & Sức khỏe', type: 'expense', icon: '🏥',
-      keywords: [
-        'thuốc','mua thuốc','nhà thuốc','pharmacy','long châu','pharmacity','guardian',
-        'bệnh viện','phòng khám','khám bệnh','bác sĩ','nha sĩ','nha khoa',
-        'xét nghiệm','siêu âm','chụp x-quang','phẫu thuật',
-        'vitamin','thực phẩm chức năng','bổ sung',
-        'gym','thể dục','yoga','fitness','phòng tập','zumba',
-        'spa','massage','làm đẹp','tóc','cắt tóc','salon',
-        'bảo hiểm y tế','bhyt'
-      ]
-    },
-    {
-      name: 'Giải trí & Mua sắm', type: 'expense', icon: '🎬',
-      keywords: [
-        'shopee','lazada','tiki','sendo','amazon','ebay',
+        'shopee','lazada','tiki','sendo','amazon','ebay','tiktok shop',
         'quần áo','áo','quần','váy','giày','dép','túi','thắt lưng','phụ kiện',
         'điện thoại','máy tính','laptop','tablet','tai nghe','phụ kiện điện tử',
         'cinema','rạp phim','cgv','lotte cinema','galaxy cinema','bhd','cinestar',
         'netflix','youtube premium','spotify','apple music','game','steam',
         'du lịch','khách sạn','resort','tour','vé tham quan',
-        'karaoke','bar','pub','club','nightclub',
+        'karaoke','bar','pub','club','nightclub','bida',
         'mỹ phẩm','son môi','kem dưỡng','serum','nước hoa'
       ]
     },
     {
-      name: 'Giáo dục', type: 'expense', icon: '📚',
+      name: 'Giáo dục & Học tập', type: 'expense', icon: '📚',
       keywords: [
         'học phí','học','trường','đại học','cao đẳng','trung học',
         'khóa học','course','udemy','coursera','edx','kyna','unica',
@@ -592,10 +629,9 @@ async function seedDanhMuc(): Promise<void> {
       ]
     },
     {
-      name: 'Thu nhập lương', type: 'income', icon: '💼',
+      name: 'Thu nhập lương', type: 'income', icon: '💵',
       keywords: [
-        'lương','salary','tiền lương','lương tháng','lương cơ bản',
-        'thưởng','bonus','thưởng tết','thưởng kpi','thưởng dự án',
+        'lương','salary','tiền lương','lương tháng','lương cơ bản','ting ting lương',
         'phụ cấp','allowance','trợ cấp','hỗ trợ','tiền xăng','tiền cơm'
       ]
     },
@@ -606,11 +642,11 @@ async function seedDanhMuc(): Promise<void> {
         'đầu tư','cổ tức','lợi nhuận','profit','lãi',
         'bán hàng','bán đồ','thanh lý','cho thuê',
         'trúng thưởng','quà tặng','nhận tiền','chuyển tiền nhận',
-        'hoàn tiền','cashback','refund'
+        'hoàn tiền','cashback','refund','tiền bo','tiền tip'
       ]
     },
     {
-      name: 'Tiết kiệm & Đầu tư', type: 'expense', icon: '💳',
+      name: 'Tiết kiệm & Đầu tư', type: 'both', icon: '📈',
       keywords: [
         'tiết kiệm','gửi tiết kiệm','tiết kiệm ngân hàng','gửi ngân hàng',
         'mua vàng','vàng sjc','vàng nhẫn',
@@ -621,6 +657,19 @@ async function seedDanhMuc(): Promise<void> {
       ]
     },
     {
+      name: 'Quà tặng & Cho biếu', type: 'expense', icon: '🎁',
+      keywords: [
+        'quà','quà tặng','tặng quà','biếu','mừng cưới','đám cưới','sinh nhật',
+        'thôi nôi','tân gia','mừng thọ','phúng viếng','lì xì','từ thiện','ủng hộ'
+      ]
+    },
+    {
+      name: 'Được tặng & Cho', type: 'income', icon: '🎁',
+      keywords: [
+        'được tặng','được cho','tiền cho','tiền lì xì','được biếu','bố mẹ cho','người yêu cho'
+      ]
+    },
+    {
       name: 'Sửa chữa & Bảo trì', type: 'expense', icon: '🔧',
       keywords: [
         'sửa chữa','sửa','thay thế','bảo trì','bảo dưỡng','maintain',
@@ -628,6 +677,10 @@ async function seedDanhMuc(): Promise<void> {
         'thợ','thợ điện','thợ nước','thợ hàn',
         'linh kiện','phụ tùng','vật tư','thiết bị'
       ]
+    },
+    {
+      name: 'Khác', type: 'both', icon: '🏷️',
+      keywords: ['khác','chi tiêu khác','khoản khác']
     }
   ];
 
@@ -645,5 +698,5 @@ async function seedDanhMuc(): Promise<void> {
     }
   }
 
-  console.log('✅ Đã tạo 10 danh mục mặc định');
+  console.log('✅ Đã tạo 13 danh mục chuẩn mặc định');
 }

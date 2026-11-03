@@ -1084,7 +1084,16 @@ export default function TransactionForm({ onCreated, user }: Props) {
                   <input
                     type="text"
                     value={description}
-                    onChange={e => setDescription(e.target.value)}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setDescription(val);
+                      if (!userOverrodeCategory && val.trim()) {
+                        const guessed = guessCategoryAndType(val);
+                        if (guessed.category && guessed.category !== 'Khác') {
+                          setCategory(guessed.category);
+                        }
+                      }
+                    }}
                     placeholder={isAnyDebt ? "Ví dụ: Cho Nam vay tiền đóng trọ..." : "Mô tả giao dịch"}
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />

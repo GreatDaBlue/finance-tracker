@@ -53,10 +53,19 @@ export async function classify(description: string, type: 'income' | 'expense'):
     return 'Ăn uống';
   }
   if (/(?:^|[^\p{L}\p{N}])(xăng|xe|gửi xe|đổ xăng|bãi xe|đậu xe|rửa xe|sửa xe|thay nhớt|grab|taxi|bus)(?:[^\p{L}\p{N}]|$)/iu.test(description)) {
-    return 'Xe cộ';
+    return 'Xe cộ & Đi lại';
   }
   if (/(?:^|[^\p{L}\p{N}])(gym|thuốc|mua thuốc|khám|bệnh viện|bác sĩ|nha khoa|răng|fitness|yoga|spa)(?:[^\p{L}\p{N}]|$)/iu.test(description)) {
-    return 'Sức khỏe';
+    return 'Sức khỏe & Y tế';
+  }
+  if (/(?:^|[^\p{L}\p{N}])(tiền nhà|thuê nhà|phòng trọ|chung cư|tiền điện|tiền nước|hóa đơn|tiền mạng|wifi)(?:[^\p{L}\p{N}]|$)/iu.test(description)) {
+    return 'Nhà cửa & Hóa đơn';
+  }
+  if (/(?:^|[^\p{L}\p{N}])(mua sắm|shopee|lazada|quần áo|giày dép|mỹ phẩm|xem phim|cgv|du lịch|karaoke)(?:[^\p{L}\p{N}]|$)/iu.test(description)) {
+    return 'Mua sắm & Giải trí';
+  }
+  if (/(?:^|[^\p{L}\p{N}])(học phí|tiền học|sách vở|khóa học)(?:[^\p{L}\p{N}]|$)/iu.test(description)) {
+    return 'Giáo dục & Học tập';
   }
 
   const text = chuanHoaVanBan(description);

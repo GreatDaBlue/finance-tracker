@@ -21,14 +21,16 @@ export function localTodayISO(): string {
 
 export const DANH_MUC = [
   'Ăn uống',
-  'Xe cộ',
-  'Sức khỏe',
-  'Nhà cửa',
+  'Xe cộ & Đi lại',
+  'Sức khỏe & Y tế',
+  'Nhà cửa & Hóa đơn',
   'Mua sắm & Giải trí',
-  'Giáo dục',
+  'Giáo dục & Học tập',
   'Thu nhập lương',
   'Thu nhập khác',
   'Tiết kiệm & Đầu tư',
+  'Quà tặng & Cho biếu',
+  'Được tặng & Cho',
   'Sửa chữa & Bảo trì',
   'Khác'
 ];
@@ -588,15 +590,15 @@ export function guessCategoryAndType(text: string): { type: 'income' | 'expense'
   }
   // Xe cộ: xăng, xe, gửi xe, đổ xăng, rửa xe, grab, taxi...
   if (matchViWords(lower, 'xăng|xe|gửi xe|đậu xe|bãi xe|đổ xăng|rửa xe|sửa xe|thay nhớt|grab|be|gojek|taxi|bus|vé xe|vé tàu|vé máy bay')) {
-    return { type: 'expense', category: 'Xe cộ' };
+    return { type: 'expense', category: 'Xe cộ & Đi lại' };
   }
   // Sức khỏe: gym, thuốc, khám, bác sĩ, bệnh viện, nha khoa, cồn y tế, ráy tai...
   if (matchViWords(lower, 'gym|thuốc|mua thuốc|bệnh viện|khám|bác sĩ|nha|răng|nha khoa|fitness|yoga|spa|mát xa|cắt tóc|gội đầu|mỹ phẩm|cồn|ráy tai|vệ sinh tai|tai mũi họng|y tế')) {
-    return { type: 'expense', category: 'Sức khỏe' };
+    return { type: 'expense', category: 'Sức khỏe & Y tế' };
   }
   // Nhà cửa & Tiện ích
   if (matchViWords(lower, 'điện|nước|tiền điện|tiền nước|internet|wifi|tiền nhà|thuê nhà|phòng trọ|chung cư|gas|rác|dọn vệ sinh|vệ sinh nhà')) {
-    return { type: 'expense', category: 'Nhà cửa' };
+    return { type: 'expense', category: 'Nhà cửa & Hóa đơn' };
   }
   // Mua sắm & Giải trí
   if (matchViWords(lower, 'shopee|lazada|tiki|quần|áo|váy|giày|dép|túi|ví|phim|cgv|cinema|game|nạp thẻ|nạp game|netflix|du lịch|khách sạn|homestay')) {
@@ -604,7 +606,7 @@ export function guessCategoryAndType(text: string): { type: 'income' | 'expense'
   }
   // Giáo dục
   if (matchViWords(lower, 'học|khóa học|sách|giáo trình|học phí|trường|gia sư|bút|vở')) {
-    return { type: 'expense', category: 'Giáo dục' };
+    return { type: 'expense', category: 'Giáo dục & Học tập' };
   }
   // Tiết kiệm & Đầu tư
   if (matchViWords(lower, 'tiết kiệm|gửi ngân hàng|vàng|chứng khoán|cổ phiếu|crypto|bitcoin|quỹ')) {

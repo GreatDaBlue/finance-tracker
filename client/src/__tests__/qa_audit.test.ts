@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { parseMultiSmartInput, parseAmountInput, formatAmountDisplay, parseBatchTransactions, parseSmartInput, getCategoryIcon, guessCategoryAndType } from '../lib/smartParser';
+import { parseMultiSmartInput, parseAmountInput, formatAmountDisplay, parseBatchTransactions, parseSmartInput, getCategoryIcon, guessCategoryAndType, DANH_MUC } from '../lib/smartParser';
 import { formatVND } from '../lib/api';
 import { getTimePeriodLabel } from '../components/Dashboard';
+import { DEFAULT_CATEGORIES } from '../lib/customCategories';
 
 describe('QA Test Suite — Logic & Dữ liệu Biên (Calculations & Edge Cases)', () => {
 
@@ -297,7 +298,7 @@ khóa   155.000
         amount: 30000
       });
       expect(items[1]).toMatchObject({
-        category: 'Xe cộ',
+        category: 'Xe cộ & Đi lại',
         type: 'expense',
         amount: 50000
       });
@@ -380,6 +381,44 @@ khóa   155.000
         dateTo: '2025-10-31'
       });
       expect(labelPrevYearRange).toBe('Tháng 10/2025');
+    });
+  });
+
+  describe('9. Rà soát chuẩn hóa Danh mục & Loại bỏ triệt để trùng lặp', () => {
+    it('Đảm bảo DANH_MUC và DEFAULT_CATEGORIES đồng bộ 100%, không bị phân mảnh tên gọi', () => {
+      const defaultNames = DEFAULT_CATEGORIES.map(c => c.name);
+      expect(defaultNames).toContain('Ăn uống');
+      expect(defaultNames).not.toContain('Thực phẩm & Ăn uống');
+      expect(defaultNames).toContain('Xe cộ & Đi lại');
+      expect(defaultNames).not.toContain('Xe cộ');
+      expect(defaultNames).toContain('Sức khỏe & Y tế');
+      expect(defaultNames).not.toContain('Sức khỏe');
+      expect(defaultNames).toContain('Nhà cửa & Hóa đơn');
+      expect(defaultNames).not.toContain('Nhà cửa');
+      expect(defaultNames).toContain('Giáo dục & Học tập');
+      expect(defaultNames).not.toContain('Giáo dục');
+
+      for (const d of DANH_MUC) {
+        expect(defaultNames, `Danh mục "${d}" phải có trong DEFAULT_CATEGORIES`).toContain(d);
+      }
+    });
+
+    it('Nhập "ăn sáng" luôn ra đúng "Ăn uống", TUYỆT ĐỐI KHÔNG BAO GIỜ bị thành "Khác"', () => {
+      const tests = [
+        'ăn sáng',
+        'Ăn sáng',
+        'ăn sáng 20k',
+        'Ăn sáng 20.000',
+        'ăn sáng 15000đ',
+        'bữa sáng 25k',
+        'hôm nay ăn sáng 30k',
+        'sáng nay ăn bánh mì 20k'
+      ];
+      for (const t of tests) {
+        const res = guessCategoryAndType(t);
+        expect(res.category, `Chuỗi "${t}" phải có category là "Ăn uống"`).toBe('Ăn uống');
+        expect(res.category).not.toBe('Khác');
+      }
     });
   });
 });
